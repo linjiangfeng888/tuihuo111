@@ -1,18 +1,19 @@
 /**
- * modules/exchange.js - 数据交换模块（修复增强版）
+ * modules/exchange.js - 数据交换模块（增强兼容版）
  * 退货拆包系统 - 数据交换模块
- * 版本: 1.5.0
+ * 版本: 1.7.0
  * 修复问题：
- * 1. 增强依赖注入兼容性
- * 2. 改进Excel导入错误处理
- * 3. 优化进度报告和用户体验
- * 4. 修复批量导入的重复处理问题
+ * 1. 增强与 database.js 的兼容性
+ * 2. 修复导入方法调用链
+ * 3. 添加直接文件导入接口
+ * 4. 改进错误处理和模块初始化
+ * 5. 确保与 index.html 完美配合
  */
 
 class ExchangeModule {
     constructor(config = {}) {
         // 模块信息
-        this.version = '1.5.0';
+        this.version = '1.7.0';
         this.name = '退货拆包数据交换模块';
         
         // 默认配置
@@ -51,6 +52,15 @@ class ExchangeModule {
                 utils: false,
                 database: false,
                 excel: false
+            },
+            // 新增：缓存数据库实例
+            databaseInstance: null,
+            // 新增：导入进度
+            importProgress: {
+                total: 0,
+                processed: 0,
+                percentage: 0,
+                currentFile: null
             }
         };
 
@@ -157,7 +167,24 @@ class ExchangeModule {
                 
                 '损坏情况': 'damage',
                 'Damage': 'damage',
-                '损坏类型': 'damageType'
+                '损坏类型': 'damageType',
+                
+                // 扩展字段
+                '视频文件': 'videoFile',
+                'VideoFile': 'videoFile',
+                '视频路径': 'videoFile',
+                
+                '拆包人员': 'operator',
+                'Operator': 'operator',
+                '操作员': 'operator',
+                
+                '重量': 'weight',
+                'Weight': 'weight',
+                '包裹重量': 'weight',
+                
+                '体积': 'volume',
+                'Volume': 'volume',
+                '包裹体积': 'volume'
             },
             
             // 反向映射：数据库字段 -> 显示字段
@@ -173,6 +200,9 @@ class ExchangeModule {
                 status: '状态',
                 damage: '损坏情况',
                 videoFile: '视频文件',
+                operator: '拆包人员',
+                weight: '重量(kg)',
+                volume: '体积(m³)',
                 createdAt: '创建时间',
                 updatedAt: '更新时间'
             }
@@ -196,11 +226,45 @@ class ExchangeModule {
             }
         };
 
-        this._log('✅ ExchangeModule 实例已创建 (v1.5.0)', 'success');
+        // 数据验证规则
+        this.validationRules = {
+            orderNumber: {
+                required: true,
+                pattern: /^[A-Za-z0-9_-]{6,50}$/,
+                message: '订单号必须是6-50位的字母数字组合'
+            },
+            expressNumber: {
+                required: false,
+                pattern: /^[A-Za-z0-9]{8,30}$/,
+                message: '发货运单号格式不正确'
+            },
+            trackingNumber: {
+                required: false,
+                pattern: /^[A-Za-z0-9]{8,30}$/,
+                message: '退货运单号格式不正确'
+            },
+            skuInfo: {
+                required: false,
+                maxLength: 500,
+                message: 'SKU信息不能超过500字符'
+            },
+            shopName: {
+                required: false,
+                maxLength: 100,
+                message: '店铺名称不能超过100字符'
+            },
+            notes: {
+                required: false,
+                maxLength: 1000,
+                message: '备注不能超过1000字符'
+            }
+        };
+
+        this._log('✅ ExchangeModule 实例已创建 (v1.7.0)', 'success');
     }
 
     /**
-     * ======================= 初始化方法（增强版） =======================
+     * ======================= 初始化方法 =======================
      */
     async init(dependencies = {}, callbacks = {}) {
         try {
@@ -220,15 +284,24 @@ class ExchangeModule {
                 this.callbacks = { ...this.callbacks, ...callbacks };
             }
             
-            // 设置依赖（增强兼容性）
-            await this._setupDependencies(dependencies);
+            // 🛠️ 修复：优先使用缓存的数据库实例
+            if (!this.state.databaseInstance) {
+                await this._setupDependencies(dependencies);
+            }
             
             // 检查Excel支持
             await this._checkExcelSupport();
             
             // 自动备份
             if (this.config.autoBackup) {
-                this._startAutoBackup();
+                try {
+                    // 延迟启动备份，确保其他模块已初始化
+                    setTimeout(() => {
+                        this._startAutoBackup();
+                    }, 1000);
+                } catch (backupError) {
+                    this._log(`⚠️ 自动备份功能初始化失败: ${backupError.message}`, 'warn');
+                }
             }
 
             this.state.isInitialized = true;
@@ -269,7 +342,750 @@ class ExchangeModule {
     }
 
     /**
-     * ======================= 依赖注入（增强兼容性） =======================
+     * ======================= 文件解析方法 =======================
+     */
+
+    /**
+     * 实现文件解析方法
+     */
+    async _parseImportFile(file, format, options = {}) {
+        this._log(`开始解析${format.toUpperCase()}文件: ${file.name}`, 'info');
+        
+        try {
+            let parsedData;
+            
+            switch (format.toLowerCase()) {
+                case 'csv':
+                    parsedData = await this._parseCSVFile(file, options);
+                    break;
+                    
+                case 'json':
+                    parsedData = await this._parseJSONFile(file, options);
+                    break;
+                    
+                case 'excel':
+                    parsedData = await this._parseExcelFile(file, options);
+                    break;
+                    
+                case 'txt':
+                    parsedData = await this._parseTextFile(file, options);
+                    break;
+                    
+                default:
+                    throw new Error(`不支持的格式: ${format}`);
+            }
+            
+            // 数据转换和映射
+            const transformedData = this._transformData(parsedData, options);
+            
+            return {
+                records: transformedData,
+                metadata: {
+                    fileName: file.name,
+                    fileSize: file.size,
+                    format: format,
+                    originalCount: parsedData.length,
+                    transformedCount: transformedData.length,
+                    parseTime: new Date().toISOString()
+                }
+            };
+            
+        } catch (error) {
+            this._log(`❌ 解析文件失败: ${error.message}`, 'error');
+            throw new Error(`解析${format}文件失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 解析CSV文件
+     */
+    async _parseCSVFile(file, options = {}) {
+        try {
+            const text = await this.dependencies.utils.readFile(file, this.config.encoding);
+            
+            // 解析CSV内容
+            const lines = text.split('\n');
+            if (lines.length === 0) {
+                throw new Error('CSV文件为空');
+            }
+            
+            // 解析表头
+            const headers = this._parseCSVLine(lines[0]).map(h => h.trim());
+            
+            // 解析数据行
+            const data = [];
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+                
+                const row = this._parseCSVLine(lines[i]);
+                const record = {};
+                
+                for (let j = 0; j < headers.length; j++) {
+                    if (j < row.length) {
+                        const header = headers[j];
+                        const value = row[j].trim();
+                        
+                        // 字段映射
+                        const mappedField = this._mapFieldName(header);
+                        if (mappedField) {
+                            record[mappedField] = value;
+                        } else {
+                            record[header] = value;
+                        }
+                    }
+                }
+                
+                if (Object.keys(record).length > 0) {
+                    data.push(record);
+                }
+            }
+            
+            return data;
+            
+        } catch (error) {
+            throw new Error(`CSV解析失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 解析JSON文件
+     */
+    async _parseJSONFile(file, options = {}) {
+        try {
+            const text = await this.dependencies.utils.readFile(file, this.config.encoding);
+            const jsonData = JSON.parse(text);
+            
+            // 处理不同格式的JSON数据
+            if (Array.isArray(jsonData)) {
+                return jsonData;
+            } else if (jsonData.data && Array.isArray(jsonData.data)) {
+                return jsonData.data;
+            } else if (jsonData.records && Array.isArray(jsonData.records)) {
+                return jsonData.records;
+            } else {
+                throw new Error('JSON格式不支持，请确保数据是数组格式');
+            }
+            
+        } catch (error) {
+            throw new Error(`JSON解析失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 解析Excel文件（支持XLSX库）
+     */
+    async _parseExcelFile(file, options = {}) {
+        try {
+            // 检查XLSX库是否可用
+            if (typeof XLSX === 'undefined') {
+                this._log('⚠️ XLSX库未加载，尝试使用降级方案', 'warn');
+                return await this._parseExcelFallback(file, options);
+            }
+            
+            const data = await file.arrayBuffer();
+            const workbook = XLSX.read(data, { type: 'array' });
+            
+            // 获取第一个工作表
+            const firstSheetName = workbook.SheetNames[0];
+            if (!firstSheetName) {
+                throw new Error('Excel文件中没有工作表');
+            }
+            
+            const worksheet = workbook.Sheets[firstSheetName];
+            
+            // 转换为JSON
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+                header: 1,
+                defval: '',
+                raw: false
+            });
+            
+            if (jsonData.length < 2) {
+                throw new Error('Excel文件中没有数据');
+            }
+            
+            // 提取表头和数据
+            const headers = jsonData[0].map(h => String(h).trim());
+            const rows = jsonData.slice(1);
+            
+            // 转换为对象数组
+            const records = [];
+            for (let i = 0; i < rows.length; i++) {
+                const row = rows[i];
+                const record = {};
+                
+                for (let j = 0; j < headers.length; j++) {
+                    if (j < row.length) {
+                        const header = headers[j];
+                        const value = row[j] !== undefined ? String(row[j]).trim() : '';
+                        
+                        // 字段映射
+                        const mappedField = this._mapFieldName(header);
+                        if (mappedField && value) {
+                            record[mappedField] = value;
+                        } else if (value) {
+                            record[header] = value;
+                        }
+                    }
+                }
+                
+                // 只添加有订单号的记录
+                if (record.orderNumber || record['订单编号'] || record['订单号']) {
+                    records.push(record);
+                }
+            }
+            
+            return records;
+            
+        } catch (error) {
+            this._log(`Excel解析失败: ${error.message}`, 'error');
+            throw new Error(`Excel解析失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * Excel解析降级方案
+     */
+    async _parseExcelFallback(file, options = {}) {
+        try {
+            // 尝试读取为文本
+            const text = await this.dependencies.utils.readFile(file, this.config.encoding);
+            
+            // 简单解析逻辑
+            const lines = text.split('\n');
+            if (lines.length < 2) {
+                throw new Error('Excel文件内容格式不正确');
+            }
+            
+            // 假设第一行是表头
+            const headers = lines[0].split('\t').map(h => h.trim()); // 假设是制表符分隔
+            
+            const records = [];
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                
+                const values = line.split('\t');
+                const record = {};
+                
+                for (let j = 0; j < headers.length; j++) {
+                    if (j < values.length) {
+                        const header = headers[j];
+                        const value = values[j].trim();
+                        
+                        if (value) {
+                            const mappedField = this._mapFieldName(header);
+                            if (mappedField) {
+                                record[mappedField] = value;
+                            } else {
+                                record[header] = value;
+                            }
+                        }
+                    }
+                }
+                
+                if (Object.keys(record).length > 0) {
+                    records.push(record);
+                }
+            }
+            
+            return records;
+            
+        } catch (error) {
+            throw new Error(`Excel降级解析失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * 解析文本文件
+     */
+    async _parseTextFile(file, options = {}) {
+        try {
+            const text = await this.dependencies.utils.readFile(file, this.config.encoding);
+            
+            // 简单解析，每行一个记录
+            const lines = text.split('\n');
+            const records = [];
+            
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+                
+                // 尝试从文本中提取订单信息
+                const record = this._extractOrderInfoFromText(trimmed);
+                if (record && record.orderNumber) {
+                    records.push(record);
+                }
+            }
+            
+            return records;
+            
+        } catch (error) {
+            throw new Error(`文本文件解析失败: ${error.message}`);
+        }
+    }
+
+    /**
+     * CSV行解析
+     */
+    _parseCSVLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            
+            if (char === '"') {
+                inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+                result.push(current);
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        
+        result.push(current);
+        return result.map(cell => cell.replace(/^"|"$/g, '').trim());
+    }
+
+    /**
+     * 字段名映射
+     */
+    _mapFieldName(fieldName) {
+        if (!fieldName) return null;
+        
+        const normalized = fieldName.trim();
+        
+        // 检查列映射
+        if (this.columnMapping.orders[normalized]) {
+            return this.columnMapping.orders[normalized];
+        }
+        
+        // 尝试匹配大小写
+        const lowerField = normalized.toLowerCase();
+        for (const [key, value] of Object.entries(this.columnMapping.orders)) {
+            if (key.toLowerCase() === lowerField) {
+                return value;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * 数据转换
+     */
+    _transformData(records, options = {}) {
+        const transformed = [];
+        
+        for (const record of records) {
+            try {
+                const transformedRecord = {};
+                
+                // 遍历记录的所有字段
+                for (const [key, value] of Object.entries(record)) {
+                    const mappedKey = this._mapFieldName(key) || key;
+                    
+                    // 值转换
+                    let transformedValue = value;
+                    
+                    // 空值处理
+                    if (value === undefined || value === null || value === '') {
+                        continue;
+                    }
+                    
+                    // 根据字段类型进行转换
+                    if (typeof value === 'string') {
+                        const strValue = value.trim();
+                        
+                        // 日期时间字段
+                        if (['importTime', 'scanTime', 'createdAt', 'updatedAt'].includes(mappedKey)) {
+                            transformedValue = this._parseDateTime(strValue);
+                        }
+                        // 数字字段
+                        else if (['weight', 'volume'].includes(mappedKey)) {
+                            const num = parseFloat(strValue);
+                            if (!isNaN(num)) {
+                                transformedValue = num;
+                            }
+                        }
+                        // 状态字段
+                        else if (mappedKey === 'status') {
+                            transformedValue = this._normalizeStatus(strValue);
+                        }
+                        // 损坏情况字段
+                        else if (mappedKey === 'damage') {
+                            transformedValue = this._normalizeDamage(strValue);
+                        }
+                        // 其他字符串字段
+                        else {
+                            transformedValue = strValue;
+                        }
+                    }
+                    
+                    transformedRecord[mappedKey] = transformedValue;
+                }
+                
+                // 确保必须有订单号
+                if (!transformedRecord.orderNumber) {
+                    // 尝试从其他字段提取订单号
+                    transformedRecord.orderNumber = this._extractOrderNumber(transformedRecord);
+                }
+                
+                // 设置默认值
+                if (!transformedRecord.status) {
+                    transformedRecord.status = '待处理';
+                }
+                
+                if (!transformedRecord.importTime) {
+                    transformedRecord.importTime = new Date().toISOString();
+                }
+                
+                // 添加时间戳
+                transformedRecord.updatedAt = new Date().toISOString();
+                
+                if (transformedRecord.orderNumber) {
+                    transformed.push(transformedRecord);
+                }
+                
+            } catch (error) {
+                this._log(`转换记录失败: ${error.message}`, 'debug');
+            }
+        }
+        
+        return transformed;
+    }
+
+    /**
+     * ======================= 数据验证方法 =======================
+     */
+
+    /**
+     * 实现数据验证方法
+     */
+    _validateImportData(data, options = {}) {
+        const validation = {
+            total: data.records?.length || 0,
+            valid: 0,
+            invalid: 0,
+            errors: []
+        };
+        
+        if (!data.records || !Array.isArray(data.records)) {
+            validation.errors.push({
+                type: 'structure',
+                message: '数据格式不正确，缺少records数组'
+            });
+            return validation;
+        }
+        
+        for (let i = 0; i < data.records.length; i++) {
+            const record = data.records[i];
+            const recordErrors = [];
+            
+            // 验证订单号
+            if (!record.orderNumber) {
+                recordErrors.push({
+                    field: 'orderNumber',
+                    message: '订单号不能为空'
+                });
+            } else if (!this._validateField('orderNumber', record.orderNumber)) {
+                recordErrors.push({
+                    field: 'orderNumber',
+                    value: record.orderNumber,
+                    message: this.validationRules.orderNumber.message
+                });
+            }
+            
+            // 验证其他字段
+            for (const [field, value] of Object.entries(record)) {
+                if (field !== 'orderNumber' && this.validationRules[field]) {
+                    if (!this._validateField(field, value)) {
+                        recordErrors.push({
+                            field: field,
+                            value: value,
+                            message: this.validationRules[field].message
+                        });
+                    }
+                }
+            }
+            
+            if (recordErrors.length === 0) {
+                validation.valid++;
+            } else {
+                validation.invalid++;
+                validation.errors.push({
+                    index: i,
+                    record: record,
+                    errors: recordErrors
+                });
+            }
+        }
+        
+        return validation;
+    }
+
+    /**
+     * 验证单个字段
+     */
+    _validateField(field, value) {
+        if (!value && value !== 0 && value !== false) {
+            // 非必需字段可以为空
+            if (!this.validationRules[field] || !this.validationRules[field].required) {
+                return true;
+            }
+            return false;
+        }
+        
+        const rule = this.validationRules[field];
+        if (!rule) return true;
+        
+        // 检查正则表达式
+        if (rule.pattern && !rule.pattern.test(String(value))) {
+            return false;
+        }
+        
+        // 检查最大长度
+        if (rule.maxLength && String(value).length > rule.maxLength) {
+            return false;
+        }
+        
+        return true;
+    }
+
+    /**
+     * 实现单条记录验证方法
+     */
+    _validateImportRecord(record) {
+        if (!record) {
+            throw new Error('记录不能为空');
+        }
+        
+        if (!record.orderNumber) {
+            throw new Error('订单号不能为空');
+        }
+        
+        // 验证订单号格式
+        if (!this._validateField('orderNumber', record.orderNumber)) {
+            throw new Error(`订单号格式不正确: ${record.orderNumber}`);
+        }
+        
+        return true;
+    }
+
+    /**
+     * ======================= 报告生成方法 =======================
+     */
+
+    /**
+     * 实现报告生成方法（修复stats未定义问题）
+     */
+    _generateImportReport(stats, data) {
+        // 确保stats有必要的属性
+        const safeStats = stats || {};
+        const safeData = data || {};
+        
+        // 处理时间数据
+        const startTime = safeStats.startTime ? 
+            new Date(safeStats.startTime).toLocaleString('zh-CN') : '未知';
+        const endTime = safeStats.endTime ? 
+            new Date(safeStats.endTime).toLocaleString('zh-CN') : '未知';
+        const duration = safeStats.duration ? 
+            `${safeStats.duration}ms` : '未知';
+        
+        // 计算成功率
+        const total = safeStats.total || 0;
+        const successful = (safeStats.created || 0) + (safeStats.updated || 0);
+        const successRate = total > 0 ? 
+            Math.round((successful / total) * 100) : 0;
+        
+        const report = {
+            summary: {
+                '总记录数': total,
+                '新增记录': safeStats.created || 0,
+                '更新记录': safeStats.updated || 0,
+                '跳过记录': safeStats.skipped || 0,
+                '失败记录': safeStats.failed || 0,
+                '成功率': `${successRate}%`,
+                '耗时': safeStats.duration ? `${(safeStats.duration / 1000).toFixed(2)}秒` : '未知',
+                '文件大小': safeData.metadata ? this._formatFileSize(safeData.metadata.fileSize) : '未知'
+            },
+            details: {
+                successful: successful,
+                failed: safeStats.failed || 0,
+                skipped: safeStats.skipped || 0
+            },
+            timing: {
+                '开始时间': startTime,
+                '结束时间': endTime,
+                '耗时': duration,
+                '处理速度': safeStats.duration > 0 && total > 0 ? 
+                    `${Math.round((total / safeStats.duration) * 1000)} 条/秒` : '未知'
+            },
+            fileInfo: safeData.metadata || {},
+            generatedAt: new Date().toISOString(),
+            moduleVersion: this.version
+        };
+        
+        return report;
+    }
+
+    /**
+     * ======================= 工具方法 =======================
+     */
+
+    /**
+     * 提取订单号
+     */
+    _extractOrderNumber(record) {
+        // 尝试从各种字段中提取订单号
+        const possibleFields = [
+            record.orderNumber,
+            record['订单编号'],
+            record['订单号'],
+            record['单号'],
+            record.OrderNumber,
+            record['Order No']
+        ];
+        
+        for (const field of possibleFields) {
+            if (field && typeof field === 'string' && field.trim()) {
+                return field.trim();
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * 解析日期时间
+     */
+    _parseDateTime(dateTimeStr) {
+        if (!dateTimeStr) return null;
+        
+        try {
+            // 尝试多种日期格式
+            const date = new Date(dateTimeStr);
+            if (!isNaN(date.getTime())) {
+                return date.toISOString();
+            }
+            
+            // 尝试解析中文日期
+            const chineseMatch = dateTimeStr.match(/(\d{4})[年/-](\d{1,2})[月/-](\d{1,2})[日]?\s*(\d{1,2})?:?(\d{1,2})?:?(\d{1,2})?/);
+            if (chineseMatch) {
+                const [, year, month, day, hour = 0, minute = 0, second = 0] = chineseMatch;
+                const parsedDate = new Date(
+                    parseInt(year),
+                    parseInt(month) - 1,
+                    parseInt(day),
+                    parseInt(hour),
+                    parseInt(minute),
+                    parseInt(second)
+                );
+                
+                if (!isNaN(parsedDate.getTime())) {
+                    return parsedDate.toISOString();
+                }
+            }
+            
+            return dateTimeStr; // 返回原字符串
+            
+        } catch (error) {
+            return dateTimeStr; // 返回原字符串
+        }
+    }
+
+    /**
+     * 标准化状态
+     */
+    _normalizeStatus(status) {
+        const statusMap = {
+            '待处理': '待处理',
+            'pending': '待处理',
+            '待办': '待处理',
+            
+            '已处理': '已处理',
+            'completed': '已处理',
+            '完成': '已处理',
+            
+            '处理中': '处理中',
+            'processing': '处理中',
+            '进行中': '处理中',
+            
+            '已取消': '已取消',
+            'cancelled': '已取消',
+            '取消': '已取消'
+        };
+        
+        return statusMap[status] || status;
+    }
+
+    /**
+     * 标准化损坏情况
+     */
+    _normalizeDamage(damage) {
+        const damageMap = {
+            '完好': '完好',
+            'good': '完好',
+            '正常': '完好',
+            
+            '破损': '破损',
+            'damaged': '破损',
+            '损坏': '破损',
+            
+            '缺件': '缺件',
+            'missing': '缺件',
+            '缺少': '缺件',
+            
+            '其他': '其他',
+            'other': '其他'
+        };
+        
+        return damageMap[damage] || damage;
+    }
+
+    /**
+     * 从文本中提取订单信息
+     */
+    _extractOrderInfoFromText(text) {
+        const record = {};
+        
+        // 尝试提取订单号
+        const orderNumberMatch = text.match(/(订单[号:：]?|单号[:：]?|order[:\s]?)([A-Za-z0-9_-]{6,50})/i);
+        if (orderNumberMatch) {
+            record.orderNumber = orderNumberMatch[2];
+        }
+        
+        // 尝试提取运单号
+        const trackingMatch = text.match(/(运单[号:：]?|快递[号:：]?|tracking[:\s]?)([A-Za-z0-9]{8,30})/i);
+        if (trackingMatch) {
+            record.trackingNumber = trackingMatch[2];
+        }
+        
+        // 提取SKU信息
+        const skuMatch = text.match(/(sku[:\s]?|商品[:\s]?)([A-Za-z0-9_-]{3,50})/i);
+        if (skuMatch) {
+            record.skuInfo = skuMatch[2];
+        }
+        
+        return record;
+    }
+
+    /**
+     * 格式化文件大小
+     */
+    _formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    /**
+     * ======================= 依赖注入方法 =======================
      */
     async _setupDependencies(dependencies) {
         this._log('🔧 设置 ExchangeModule 依赖...', 'info');
@@ -305,7 +1121,8 @@ class ExchangeModule {
             dependencies.database,
             window.ReturnUnpackSystem?.modules?.database,
             window.databaseModule,
-            window.ReturnUnpackSystem?.Database
+            window.ReturnUnpackSystem?.Database,
+            this.state.databaseInstance // 使用缓存的实例
         ];
         
         for (const source of databaseSources) {
@@ -319,6 +1136,7 @@ class ExchangeModule {
                 if (hasRequiredMethods) {
                     this.dependencies.database = source;
                     depCheck.database = true;
+                    this.state.databaseInstance = source; // 缓存实例
                     this._log('✅ Database模块已注入', 'success');
                     break;
                 } else {
@@ -335,6 +1153,7 @@ class ExchangeModule {
                     if (typeof db.initialize === 'function') {
                         await db.initialize();
                         this.dependencies.database = db;
+                        this.state.databaseInstance = db; // 缓存实例
                         depCheck.database = true;
                         this._log('✅ 创建新的Database实例', 'success');
                     }
@@ -342,6 +1161,7 @@ class ExchangeModule {
             } catch (error) {
                 this._log(`❌ 创建Database实例失败: ${error.message}`, 'error');
                 this.dependencies.database = this._createMockDatabase();
+                this.state.databaseInstance = this.dependencies.database; // 缓存实例
                 depCheck.database = false;
                 this._log('⚠️ 使用模拟Database，数据不会持久化', 'warn');
             }
@@ -368,7 +1188,199 @@ class ExchangeModule {
     }
 
     /**
-     * 创建降级版Utils（优化版）
+     * ======================= 备份功能 =======================
+     */
+
+    /**
+     * 紧急修复：添加缺失的 _startAutoBackup 方法
+     */
+    async _startAutoBackup() {
+        try {
+            if (!this.config.autoBackup) {
+                return;
+            }
+
+            if (this.state.backupTimer) {
+                clearInterval(this.state.backupTimer);
+            }
+
+            const backupInterval = this.config.backupInterval || 24;
+            const intervalMs = backupInterval * 60 * 60 * 1000; // 转换为毫秒
+
+            this._log(`🔄 启动自动备份，每 ${backupInterval} 小时执行一次`, 'info');
+
+            // 立即执行一次备份检查
+            this._checkAndCreateBackup();
+
+            // 设置定时器
+            this.state.backupTimer = setInterval(() => {
+                this._checkAndCreateBackup();
+            }, intervalMs);
+
+        } catch (error) {
+            this._log(`❌ 启动自动备份失败: ${error.message}`, 'error');
+            this._triggerCallback('onBackupError', {
+                error: error.message,
+                timestamp: new Date()
+            });
+        }
+    }
+
+    /**
+     * 检查和创建备份
+     */
+    async _checkAndCreateBackup() {
+        try {
+            // 检查数据库依赖
+            if (!this.dependencies.database || typeof this.dependencies.database.getAllOrders !== 'function') {
+                this._log('⚠️ 数据库不可用，跳过备份', 'warn');
+                return;
+            }
+
+            this._log('🔄 检查是否需要创建备份...', 'debug');
+
+            // 检查上次备份时间
+            const now = new Date();
+            const lastBackup = this.state.lastBackupTime;
+            
+            // 如果从来没有备份过，或者距离上次备份超过12小时，则创建备份
+            if (!lastBackup || (now - lastBackup) > (12 * 60 * 60 * 1000)) {
+                await this._createBackup();
+            } else {
+                this._log('🕒 距离上次备份时间较短，跳过备份', 'debug');
+            }
+
+        } catch (error) {
+            this._log(`❌ 备份检查失败: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * 创建数据备份
+     */
+    async _createBackup() {
+        try {
+            this._log('🔄 正在创建数据备份...', 'info');
+
+            // 获取所有订单数据
+            const allOrders = await this.dependencies.database.getAllOrders(10000);
+            
+            if (!allOrders || allOrders.length === 0) {
+                this._log('⚠️ 没有数据可以备份', 'warn');
+                return;
+            }
+
+            // 生成备份文件名
+            const timestamp = this.dependencies.utils ? 
+                this.dependencies.utils.formatDate(new Date(), 'yyyy-MM-dd-HH-mm-ss') :
+                new Date().toISOString().replace(/[:.]/g, '-');
+            
+            const backupFileName = `退货拆包备份_${timestamp}.json`;
+            
+            // 准备备份数据
+            const backupData = {
+                version: this.version,
+                backupTime: new Date().toISOString(),
+                totalRecords: allOrders.length,
+                data: allOrders,
+                metadata: {
+                    system: '退货拆包记录系统',
+                    module: 'ExchangeModule',
+                    config: this.config
+                }
+            };
+
+            // 创建备份文件
+            const blob = new Blob([JSON.stringify(backupData, null, 2)], { 
+                type: 'application/json' 
+            });
+
+            // 保存到本地存储
+            try {
+                // 使用File System Access API如果可用
+                if ('showSaveFilePicker' in window) {
+                    try {
+                        const handle = await window.showSaveFilePicker({
+                            suggestedName: backupFileName,
+                            types: [{
+                                description: 'JSON备份文件',
+                                accept: { 'application/json': ['.json'] }
+                            }]
+                        });
+                        
+                        const writable = await handle.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                        
+                        this._log(`✅ 备份已保存到本地文件: ${backupFileName}`, 'success');
+                        
+                    } catch (fsError) {
+                        // 用户取消或API错误，使用备用方案
+                        this._saveBackupFallback(blob, backupFileName);
+                    }
+                } else {
+                    // 降级方案
+                    this._saveBackupFallback(blob, backupFileName);
+                }
+            } catch (saveError) {
+                this._log(`⚠️ 备份保存失败（降级方案）: ${saveError.message}`, 'warn');
+                // 仍然更新备份时间，避免频繁尝试
+            }
+
+            // 更新备份时间
+            this.state.lastBackupTime = new Date();
+            
+            // 触发回调
+            this._triggerCallback('onBackupCreated', {
+                fileName: backupFileName,
+                recordCount: allOrders.length,
+                timestamp: this.state.lastBackupTime
+            });
+
+        } catch (error) {
+            this._log(`❌ 创建备份失败: ${error.message}`, 'error');
+            this._triggerCallback('onBackupError', {
+                error: error.message,
+                timestamp: new Date()
+            });
+        }
+    }
+
+    /**
+     * 备份保存降级方案
+     */
+    _saveBackupFallback(blob, fileName) {
+        try {
+            // 创建下载链接
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            link.style.display = 'none';
+            
+            document.body.appendChild(link);
+            link.click();
+            
+            // 清理
+            setTimeout(() => {
+                document.body.removeChild(link);
+                URL.revokeObjectURL(url);
+            }, 100);
+            
+            this._log(`✅ 备份已下载: ${fileName}`, 'success');
+            
+        } catch (error) {
+            this._log(`❌ 备份下载失败: ${error.message}`, 'error');
+            throw error;
+        }
+    }
+
+    /**
+     * ======================= 降级工具和模拟数据库 =======================
+     */
+
+    /**
+     * 创建降级版Utils
      */
     _createFallbackUtils() {
         const fallbackUtils = {
@@ -691,170 +1703,26 @@ class ExchangeModule {
     }
 
     /**
-     * 触发回调函数
+     * ======================= 核心导入导出方法 =======================
      */
-    _triggerCallback(callbackName, ...args) {
-        if (this.callbacks[callbackName] && typeof this.callbacks[callbackName] === 'function') {
-            try {
-                this.callbacks[callbackName](...args);
-            } catch (error) {
-                console.error(`回调函数 ${callbackName} 执行失败:`, error);
-            }
-        }
-    }
-
-    _log(message, level = 'info') {
-        const timestamp = this.dependencies.utils ? 
-            this.dependencies.utils.formatDate(new Date(), 'HH:mm:ss') : 
-            new Date().toLocaleTimeString('zh-CN');
-        
-        const prefix = `[ExchangeModule]`;
-        
-        const levels = {
-            debug: { icon: '🔍', color: '#888', console: 'debug' },
-            info: { icon: 'ℹ️', color: '#3498db', console: 'info' },
-            success: { icon: '✅', color: '#2ecc71', console: 'info' },
-            warn: { icon: '⚠️', color: '#f39c12', console: 'warn' },
-            error: { icon: '❌', color: '#e74c3c', console: 'error' }
-        };
-        
-        const levelConfig = levels[level] || levels.info;
-        
-        console[levelConfig.console](`%c${levelConfig.icon} ${prefix} ${message}`, `color: ${levelConfig.color}`);
-        
-        this._triggerCallback('onLog', { 
-            message, 
-            level, 
-            timestamp: new Date(),
-            module: 'exchange'
-        });
-    }
-
-    // ======================= 导入数据（主入口，增强错误处理） =======================
-    async importFromFile(file, mergeStrategy = 'fill_blanks') {
-        return this.importData(file, 'auto', { mergeStrategy });
-    }
-
-    async importData(file, format = 'auto', options = {}) {
-        if (this.state.isImporting) {
-            throw new Error('当前正在执行导入操作，请等待完成后再试');
-        }
-        
-        if (!file || !(file instanceof File)) {
-            throw new Error('请提供有效的文件对象');
-        }
-        
-        // 检查初始化状态
-        if (!this.state.isInitialized) {
-            const initResult = await this.init();
-            if (!initResult.success) {
-                throw new Error('数据交换模块初始化失败: ' + (initResult.error || '未知错误'));
-            }
-        }
-        
-        try {
-            this.state.isImporting = true;
-            this.state.lastImportTime = new Date();
-            
-            // 文件大小检查
-            if (file.size > this.config.maxFileSize) {
-                throw new Error(`文件大小超过限制 (最大 ${this.dependencies.utils.formatFileSize(this.config.maxFileSize)})`);
-            }
-            
-            // 格式检测
-            const detectedFormat = format === 'auto' ? 
-                this._detectFileFormat(file) : format;
-                
-            if (!this.config.importFormats.includes(detectedFormat)) {
-                throw new Error(`不支持的导入格式: ${detectedFormat}，支持格式: ${this.config.importFormats.join(', ')}`);
-            }
-            
-            // 触发导入开始回调
-            this._triggerCallback('onImportStart', {
-                fileName: file.name, 
-                format: detectedFormat,
-                size: file.size,
-                strategy: options.mergeStrategy || 'fill_blanks',
-                timestamp: this.state.lastImportTime
-            });
-            
-            this._log(`开始导入数据: ${file.name}, 格式: ${detectedFormat}, 大小: ${this.dependencies.utils.formatFileSize(file.size)}`, 'info');
-            
-            // 解析文件
-            const data = await this._parseImportFile(file, detectedFormat, options);
-            
-            // 验证数据
-            const validation = this._validateImportData(data, options);
-            if (validation.invalid > 0 && options.strictValidation) {
-                throw new Error(`发现 ${validation.invalid} 条无效记录，导入中止`);
-            }
-            
-            // 数据导入到数据库
-            const importResult = await this._smartImportToDatabase(data, options);
-            
-            // 生成报告
-            const importReport = this._generateImportReport(importResult, data);
-            
-            this.state.isImporting = false;
-            
-            // 触发导入完成回调
-            this._triggerCallback('onImportComplete', {
-                fileName: file.name, 
-                format: detectedFormat,
-                result: importResult, 
-                report: importReport,
-                timestamp: this.state.lastImportTime
-            });
-            
-            this._log(`✅ 导入完成: ${file.name}, 新增 ${importResult.created} 条, 更新 ${importResult.updated} 条, 跳过 ${importResult.skipped} 条, 失败 ${importResult.failed} 条`, 'success');
-            
-            return {
-                success: true, 
-                fileName: file.name, 
-                format: detectedFormat,
-                stats: importResult,
-                report: importReport,
-                validation: validation
-            };
-            
-        } catch (error) {
-            this.state.isImporting = false;
-            this._log(`❌ 导入失败: ${error.message}`, 'error');
-            
-            this._triggerCallback('onImportError', {
-                fileName: file.name, 
-                error: error.message, 
-                timestamp: new Date()
-            });
-            
-            throw error;
-        }
-    }
-
-    _detectFileFormat(file) {
-        const fileName = file.name.toLowerCase();
-        const fileType = file.type.toLowerCase();
-        
-        if (fileName.endsWith('.csv') || fileType.includes('csv')) return 'csv';
-        if (fileName.endsWith('.json') || fileType.includes('json')) return 'json';
-        if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || 
-            fileType.includes('excel') || fileType.includes('spreadsheet')) return 'excel';
-        if (fileName.endsWith('.txt') || fileType.includes('text')) return 'txt';
-        
-        // 默认返回CSV
-        return 'csv';
-    }
 
     /**
-     * 智能导入到数据库（增强版）
+     * 🛠️ 修复：智能导入到数据库（修复版）
      */
     async _smartImportToDatabase(data, options = {}) {
         const { mergeStrategy = 'fill_blanks', validateBeforeImport = true, 
                 showProgress = true, batchSize = this.config.batchSize } = options;
         
+        // 🔧 修复：确保stats对象有所有必要的属性
         const stats = {
             ...this.importStatsTemplate,
-            startTime: Date.now()
+            startTime: Date.now(),
+            details: {
+                created: [],
+                updated: [],
+                skipped: [],
+                failed: []
+            }
         };
         
         const results = { 
@@ -919,6 +1787,7 @@ class ExchangeModule {
                                 case 'skip_duplicates':
                                     stats.skipped++;
                                     results.skipped.push(record);
+                                    stats.details.skipped.push(record);
                                     this._log(`跳过重复订单: ${record.orderNumber}`, 'debug');
                                     break;
                                     
@@ -939,6 +1808,7 @@ class ExchangeModule {
                                     if (updateResult && updateResult.success) {
                                         stats.updated++;
                                         results.updated.push({ old: existingOrder, new: mergedOrder });
+                                        stats.details.updated.push({ old: existingOrder, new: mergedOrder });
                                     } else {
                                         throw new Error('更新订单失败');
                                     }
@@ -956,6 +1826,7 @@ class ExchangeModule {
                                     if (updateAllResult && updateAllResult.success) {
                                         stats.updated++;
                                         results.updated.push({ old: existingOrder, new: record });
+                                        stats.details.updated.push({ old: existingOrder, new: record });
                                     } else {
                                         throw new Error('更新订单失败');
                                     }
@@ -971,6 +1842,7 @@ class ExchangeModule {
                             if (addResult && addResult.success) {
                                 stats.created++;
                                 results.created.push(record);
+                                stats.details.created.push(record);
                             } else {
                                 throw new Error('添加订单失败');
                             }
@@ -978,10 +1850,12 @@ class ExchangeModule {
                         
                     } catch (error) {
                         stats.failed++;
-                        results.failed.push({
+                        const errorDetail = {
                             record: record,
                             error: error.message
-                        });
+                        };
+                        results.failed.push(errorDetail);
+                        stats.details.failed.push(errorDetail);
                         this._log(`❌ 导入失败: ${record.orderNumber} - ${error.message}`, 'error');
                     }
                     
@@ -999,6 +1873,7 @@ class ExchangeModule {
                 }
             }
             
+            // 🔧 修复：确保所有必需的统计属性都已设置
             stats.endTime = Date.now();
             stats.duration = stats.endTime - stats.startTime;
             stats.total = totalRecords;
@@ -1008,7 +1883,11 @@ class ExchangeModule {
             
             this._log(`✅ 导入完成统计: ${stats.created} 新增, ${stats.updated} 更新, ${stats.skipped} 跳过, ${stats.failed} 失败, 耗时 ${stats.duration}ms`, 'info');
             
-            return stats;
+            // 🔧 修复：返回完整的stats对象
+            return {
+                ...stats,
+                results: results
+            };
             
         } catch (error) {
             this._log(`❌ 批量导入失败: ${error.message}`, 'error');
@@ -1016,10 +1895,222 @@ class ExchangeModule {
         }
     }
 
-    // ======================= 其他方法保持原样，但使用增强的日志和错误处理 =======================
-    
-    // ... (原有的大部分方法保持不变，但调用 this._log 和 this._triggerCallback)
+    /**
+     * 🛠️ 修复：导入数据方法（主入口） - 增强兼容性
+     */
+    async importFromFile(file, mergeStrategy = 'fill_blanks') {
+        return this.importData(file, 'auto', { mergeStrategy });
+    }
 
+    /**
+     * 🛠️ 修复：增强的导入方法
+     */
+    async importData(file, format = 'auto', options = {}) {
+        if (this.state.isImporting) {
+            throw new Error('当前正在执行导入操作，请等待完成后再试');
+        }
+        
+        if (!file || !(file instanceof File)) {
+            throw new Error('请提供有效的文件对象');
+        }
+        
+        // 检查初始化状态
+        if (!this.state.isInitialized) {
+            const initResult = await this.init();
+            if (!initResult.success) {
+                throw new Error('数据交换模块初始化失败: ' + (initResult.error || '未知错误'));
+            }
+        }
+        
+        try {
+            this.state.isImporting = true;
+            this.state.lastImportTime = new Date();
+            
+            // 更新导入进度
+            this.state.importProgress = {
+                total: 0,
+                processed: 0,
+                percentage: 0,
+                currentFile: file.name
+            };
+            
+            // 文件大小检查
+            if (file.size > this.config.maxFileSize) {
+                throw new Error(`文件大小超过限制 (最大 ${this._formatFileSize(this.config.maxFileSize)})`);
+            }
+            
+            // 格式检测
+            const detectedFormat = format === 'auto' ? 
+                this._detectFileFormat(file) : format;
+                
+            if (!this.config.importFormats.includes(detectedFormat)) {
+                throw new Error(`不支持的导入格式: ${detectedFormat}，支持格式: ${this.config.importFormats.join(', ')}`);
+            }
+            
+            // 触发导入开始回调
+            this._triggerCallback('onImportStart', {
+                fileName: file.name, 
+                format: detectedFormat,
+                size: file.size,
+                strategy: options.mergeStrategy || 'fill_blanks',
+                timestamp: this.state.lastImportTime
+            });
+            
+            this._log(`开始导入数据: ${file.name}, 格式: ${detectedFormat}, 大小: ${this._formatFileSize(file.size)}`, 'info');
+            
+            // 解析文件
+            const data = await this._parseImportFile(file, detectedFormat, options);
+            
+            // 更新总记录数
+            this.state.importProgress.total = data.records?.length || 0;
+            
+            // 验证数据
+            const validation = this._validateImportData(data, options);
+            if (validation.invalid > 0 && options.strictValidation) {
+                throw new Error(`发现 ${validation.invalid} 条无效记录，导入中止`);
+            }
+            
+            // 数据导入到数据库
+            const importResult = await this._smartImportToDatabase(data, options);
+            
+            // 🔧 修复：确保importResult包含所有必要属性
+            const importStats = {
+                total: importResult.total || 0,
+                created: importResult.created || 0,
+                updated: importResult.updated || 0,
+                skipped: importResult.skipped || 0,
+                failed: importResult.failed || 0,
+                startTime: importResult.startTime || this.state.lastImportTime.getTime(),
+                endTime: importResult.endTime || Date.now(),
+                duration: importResult.duration || 0
+            };
+            
+            // 生成报告
+            const importReport = this._generateImportReport(importStats, data);
+            
+            this.state.isImporting = false;
+            this.state.importProgress.processed = this.state.importProgress.total;
+            this.state.importProgress.percentage = 100;
+            
+            // 触发导入完成回调
+            this._triggerCallback('onImportComplete', {
+                fileName: file.name, 
+                format: detectedFormat,
+                result: importStats, 
+                report: importReport,
+                validation: validation,
+                timestamp: this.state.lastImportTime
+            });
+            
+            this._log(`✅ 导入完成: ${file.name}, 新增 ${importStats.created} 条, 更新 ${importStats.updated} 条, 跳过 ${importStats.skipped} 条, 失败 ${importStats.failed} 条`, 'success');
+            
+            return {
+                success: true, 
+                fileName: file.name, 
+                format: detectedFormat,
+                stats: importStats,
+                report: importReport,
+                validation: validation
+            };
+            
+        } catch (error) {
+            this.state.isImporting = false;
+            this.state.importProgress = {
+                total: 0,
+                processed: 0,
+                percentage: 0,
+                currentFile: null
+            };
+            
+            this._log(`❌ 导入失败: ${error.message}`, 'error');
+            
+            this._triggerCallback('onImportError', {
+                fileName: file.name, 
+                error: error.message, 
+                timestamp: new Date()
+            });
+            
+            throw error;
+        }
+    }
+
+    /**
+     * 🛠️ 新增：简化导入方法（供 index.html 直接调用）
+     */
+    async importExcelFile(file, mergeStrategy = 'fill_blanks') {
+        console.log('📁 [importExcelFile] 调用简化导入方法:', file.name);
+        
+        try {
+            // 直接调用主导入方法
+            return await this.importFromFile(file, mergeStrategy);
+        } catch (error) {
+            console.error('❌ [importExcelFile] 导入失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 检测文件格式
+     */
+    _detectFileFormat(file) {
+        const fileName = file.name.toLowerCase();
+        const fileType = file.type.toLowerCase();
+        
+        if (fileName.endsWith('.csv') || fileType.includes('csv')) return 'csv';
+        if (fileName.endsWith('.json') || fileType.includes('json')) return 'json';
+        if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || 
+            fileType.includes('excel') || fileType.includes('spreadsheet')) return 'excel';
+        if (fileName.endsWith('.txt') || fileType.includes('text')) return 'txt';
+        
+        // 默认返回CSV
+        return 'csv';
+    }
+
+    /**
+     * ======================= 其他核心方法 =======================
+     */
+
+    /**
+     * 触发回调函数
+     */
+    _triggerCallback(callbackName, ...args) {
+        if (this.callbacks[callbackName] && typeof this.callbacks[callbackName] === 'function') {
+            try {
+                this.callbacks[callbackName](...args);
+            } catch (error) {
+                console.error(`回调函数 ${callbackName} 执行失败:`, error);
+            }
+        }
+    }
+
+    _log(message, level = 'info') {
+        const timestamp = new Date().toLocaleTimeString('zh-CN');
+        
+        const prefix = `[ExchangeModule]`;
+        
+        const levels = {
+            debug: { icon: '🔍', color: '#888', console: 'debug' },
+            info: { icon: 'ℹ️', color: '#3498db', console: 'info' },
+            success: { icon: '✅', color: '#2ecc71', console: 'info' },
+            warn: { icon: '⚠️', color: '#f39c12', console: 'warn' },
+            error: { icon: '❌', color: '#e74c3c', console: 'error' }
+        };
+        
+        const levelConfig = levels[level] || levels.info;
+        
+        console[levelConfig.console](`%c${levelConfig.icon} ${prefix} ${message}`, `color: ${levelConfig.color}`);
+        
+        this._triggerCallback('onLog', { 
+            message, 
+            level, 
+            timestamp: new Date(),
+            module: 'exchange'
+        });
+    }
+
+    /**
+     * 获取状态
+     */
     getStatus() {
         return {
             isInitialized: this.state.isInitialized,
@@ -1028,15 +2119,23 @@ class ExchangeModule {
             lastExportTime: this.state.lastExportTime,
             lastImportTime: this.state.lastImportTime,
             lastBackupTime: this.state.lastBackupTime,
+            importProgress: { ...this.state.importProgress },
             dependencies: { ...this.state.dependencies },
             config: { ...this.config },
             version: this.version
         };
     }
+    
+    /**
+     * 🛠️ 新增：获取导入进度
+     */
+    getImportProgress() {
+        return { ...this.state.importProgress };
+    }
 }
 
 // ============================================
-// 模块导出代码 - 修复增强版
+// 模块导出代码 - 增强兼容版
 // ============================================
 
 // 全局导出
@@ -1048,79 +2147,72 @@ if (typeof window !== 'undefined') {
     const exchangeModule = new ExchangeModule();
     window.exchangeModule = exchangeModule;
     
-    // 集成到主系统
+    // 🛠️ 修复：集成到主系统
     if (window.ReturnUnpackSystem) {
         window.ReturnUnpackSystem.modules = window.ReturnUnpackSystem.modules || {};
         window.ReturnUnpackSystem.modules.exchange = exchangeModule;
         
-        // 提供便捷方法
+        // 提供便捷方法（确保与 index.html 兼容）
         window.ReturnUnpackSystem.importExcelData = async function(file, options = {}) {
-            return exchangeModule.importFromFile(file, options.mergeStrategy || 'fill_blanks');
+            console.log('📁 [ReturnUnpackSystem.importExcelData] 调用导入方法:', file.name);
+            return exchangeModule.importExcelFile(file, options.mergeStrategy || 'fill_blanks');
         };
         
-        window.ReturnUnpackSystem.exportData = async function(format = 'excel', options = {}) {
-            return exchangeModule.exportData(format, options);
+        window.ReturnUnpackSystem.importFromFile = async function(file, mergeStrategy = 'fill_blanks') {
+            console.log('📁 [ReturnUnpackSystem.importFromFile] 调用导入方法:', file.name);
+            return exchangeModule.importFromFile(file, mergeStrategy);
         };
         
-        console.log('✅ ExchangeModule (v1.5.0) 已集成到 ReturnUnpackSystem');
+        console.log('✅ ExchangeModule (v1.7.0) 已集成到 ReturnUnpackSystem');
     }
     
-    console.log('✅ ExchangeModule v1.5.0 已全局导出');
-    
-    // 提供一个公共初始化函数供index.html调用
-    window.initializeExchangeModule = async function() {
+    // 🛠️ 修复：添加一个全局函数供 index.html 直接调用
+    window.importExcelData = async function(file, mergeStrategy = 'fill_blanks') {
+        console.log('📁 [全局 importExcelData] 调用导入方法:', file.name);
+        
         try {
-            console.log('🔄 手动初始化 ExchangeModule...');
-            
-            const dependencies = {};
-            
-            // 尝试获取Utils模块
-            if (window.ReturnUnpackSystem?.modules?.utils) {
-                dependencies.utils = window.ReturnUnpackSystem.modules.utils;
-                console.log('✅ 使用 ReturnUnpackSystem.utils');
-            } else if (window.utilsModule) {
-                dependencies.utils = window.utilsModule;
-                console.log('✅ 使用全局 utilsModule');
-            } else if (window.Utils) {
-                dependencies.utils = window.Utils;
-                console.log('✅ 使用全局 Utils');
+            if (!window.exchangeModule) {
+                console.error('❌ exchangeModule 未加载');
+                throw new Error('数据交换模块未加载');
             }
             
-            // 尝试获取Database模块
-            if (window.ReturnUnpackSystem?.modules?.database) {
-                dependencies.database = window.ReturnUnpackSystem.modules.database;
-                console.log('✅ 使用 ReturnUnpackSystem.database');
-            } else if (window.databaseModule) {
-                dependencies.database = window.databaseModule;
-                console.log('✅ 使用全局 databaseModule');
-            } else if (window.ReturnUnpackSystem?.Database) {
-                dependencies.database = window.ReturnUnpackSystem.Database;
-                console.log('✅ 使用 ReturnUnpackSystem.Database');
+            // 确保模块已初始化
+            if (!exchangeModule.state.isInitialized) {
+                console.log('🔄 ExchangeModule 正在初始化...');
+                await exchangeModule.init();
             }
             
-            const initResult = await exchangeModule.init(dependencies);
-            console.log('ExchangeModule 初始化结果:', initResult);
-            return initResult;
+            // 调用导入方法
+            return await exchangeModule.importExcelFile(file, mergeStrategy);
             
         } catch (error) {
-            console.error('❌ ExchangeModule 初始化失败:', error);
-            return { success: false, error: error.message };
+            console.error('❌ 导入失败:', error);
+            throw error;
         }
     };
+    
+    console.log('✅ ExchangeModule v1.7.0 已全局导出');
     
     // 自动初始化（简化版）
     setTimeout(() => {
         if (!exchangeModule.state.isInitialized) {
             console.log('🔄 ExchangeModule 尝试自动初始化...');
-            window.initializeExchangeModule().then(result => {
-                if (result.success) {
-                    console.log('✅ ExchangeModule 自动初始化成功');
-                } else {
-                    console.warn('⚠️ ExchangeModule 自动初始化失败，将在使用时尝试初始化');
+            
+            // 延迟初始化，确保其他模块已加载
+            setTimeout(async () => {
+                try {
+                    const initResult = await exchangeModule.init();
+                    if (initResult.success) {
+                        console.log('✅ ExchangeModule 自动初始化成功');
+                    } else {
+                        console.warn('⚠️ ExchangeModule 自动初始化失败，将在使用时尝试初始化');
+                    }
+                } catch (error) {
+                    console.warn('⚠️ ExchangeModule 自动初始化异常:', error.message);
                 }
-            });
+            }, 2000);
         }
-    }, 3000);
+    }, 1000);
 }
 
 // CommonJS 导出
