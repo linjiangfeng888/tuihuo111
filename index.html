@@ -418,6 +418,27 @@
             font-weight: 500;
         }
         
+        /* 🖥️ 全屏模式样式 */
+        .fullscreen-mode {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            z-index: 99999 !important;
+            background: #000 !important;
+            border-radius: 0 !important;
+            border: none !important;
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+        
+        .fullscreen-mode video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: contain !important;
+        }
+        
         /* 设置区域 */
         .settings-grid {
             display: grid;
@@ -713,6 +734,7 @@
             padding: 15px;
             background: #f8f9ff;
             border-radius: 8px;
+            border: 1px solid #e9ecef;
         }
         
         .field-item {
@@ -1394,6 +1416,10 @@
                                 </button>
                                 <button id="cameraButton" class="btn btn-secondary">
                                     <i class="fas fa-camera"></i> 拍照
+                                </button>
+                                <!-- 🖥️ 新增：全屏按钮 -->
+                                <button id="fullscreenButton" class="btn btn-secondary">
+                                    <i class="fas fa-expand"></i> 全屏
                                 </button>
                             </div>
                             <div class="recording-status">
@@ -2116,6 +2142,14 @@
         let videoProcessingLock = false; // 视频处理锁
         let recordingDuration = 30; // 🛠️ 修复：存储录制时长
         
+        // 🛠️ 🔧 修复：分页系统全局变量
+        let dbCurrentPage = 1;
+        let dbPageSize = 20;
+        let dbTotalItems = 0;
+        let dbFilteredData = null;
+        let dbAllData = [];
+        let databasePageEventsBound = false; // 🛠️ 防止事件重复绑定
+        
         // 🛠️ 修复：辅助函数 - Blob转Base64
         async function blobToBase64(blob) {
             return new Promise((resolve, reject) => {
@@ -2362,6 +2396,100 @@
             });
         }
         
+        // 🖥️ 新增：全屏功能设置
+        function setupFullscreenFunctionality() {
+            const fullscreenButton = document.getElementById('fullscreenButton');
+            const videoPreview = document.getElementById('videoPreview');
+            
+            if (!fullscreenButton || !videoPreview) {
+                console.warn('⚠️ 未找到全屏按钮或视频预览容器');
+                return;
+            }
+            
+            // 检查全屏支持
+            const isSupported = document.fullscreenEnabled || 
+                               document.mozFullScreenEnabled || 
+                               document.webkitFullscreenEnabled || 
+                               document.msFullscreenEnabled;
+            
+            if (!isSupported) {
+                fullscreenButton.disabled = true;
+                fullscreenButton.title = '浏览器不支持全屏功能';
+                console.log('⚠️ 浏览器不支持全屏功能');
+                return;
+            }
+            
+            // 全屏按钮点击事件
+            fullscreenButton.addEventListener('click', function() {
+                toggleFullscreen(videoPreview);
+            });
+            
+            // 监听全屏变化
+            document.addEventListener('fullscreenchange', updateFullscreenButton);
+            document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+            document.addEventListener('mozfullscreenchange', updateFullscreenButton);
+            document.addEventListener('MSFullscreenChange', updateFullscreenButton);
+            
+            // 更新全屏按钮状态
+            function updateFullscreenButton() {
+                const isFullscreen = !!(document.fullscreenElement || 
+                                      document.webkitFullscreenElement || 
+                                      document.mozFullScreenElement || 
+                                      document.msFullscreenElement);
+                
+                if (isFullscreen) {
+                    fullscreenButton.innerHTML = '<i class="fas fa-compress"></i> 退出全屏';
+                    fullscreenButton.classList.remove('btn-secondary');
+                    fullscreenButton.classList.add('btn-primary');
+                    videoPreview.classList.add('fullscreen-mode');
+                    
+                    // 全屏时显示提示
+                    showMessage('按ESC键可退出全屏模式', 'info', 2000);
+                    console.log('🖥️ 进入全屏模式');
+                } else {
+                    fullscreenButton.innerHTML = '<i class="fas fa-expand"></i> 全屏';
+                    fullscreenButton.classList.remove('btn-primary');
+                    fullscreenButton.classList.add('btn-secondary');
+                    videoPreview.classList.remove('fullscreen-mode');
+                    console.log('🖥️ 退出全屏模式');
+                }
+            }
+            
+            // 切换全屏函数
+            function toggleFullscreen(element) {
+                if (!element) return;
+                
+                if (!document.fullscreenElement && 
+                    !document.webkitFullscreenElement && 
+                    !document.mozFullScreenElement && 
+                    !document.msFullscreenElement) {
+                    // 进入全屏
+                    if (element.requestFullscreen) {
+                        element.requestFullscreen();
+                    } else if (element.webkitRequestFullscreen) {
+                        element.webkitRequestFullscreen();
+                    } else if (element.mozRequestFullScreen) {
+                        element.mozRequestFullScreen();
+                    } else if (element.msRequestFullscreen) {
+                        element.msRequestFullscreen();
+                    }
+                } else {
+                    // 退出全屏
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    } else if (document.mozCancelFullScreen) {
+                        document.mozCancelFullScreen();
+                    } else if (document.msExitFullscreen) {
+                        document.msExitFullscreen();
+                    }
+                }
+            }
+            
+            console.log('✅ 全屏功能已初始化');
+        }
+        
         // 等待系统模块初始化完成
         window.ReturnUnpackSystem.onReady(function() {
             console.log('🏁 系统模块就绪，开始初始化应用...');
@@ -2416,6 +2544,9 @@
                 
                 // 设置订单详情事件
                 setupOrderDetailEvents();
+                
+                // 🖥️ 新增：设置全屏功能
+                setupFullscreenFunctionality();
                 
                 // 加载今日统计
                 updateTodayStats();
@@ -2734,13 +2865,23 @@
             });
         }
         
-        // 设置数据库页面事件
+        // 🛠️ 🔧 修复：设置数据库页面事件 - 防止重复绑定
         function setupDatabasePage() {
+            console.log('🔧 设置数据库页面事件监听器...');
+            
+            // 🛠️ 修复：添加事件监听器标志，防止重复绑定
+            if (databasePageEventsBound) {
+                console.log('⚠️ 数据库页面事件已绑定，跳过重复绑定');
+                return;
+            }
+            
+            // 刷新按钮
             document.getElementById('refreshDB')?.addEventListener('click', function() {
                 loadDatabaseData();
                 showMessage('数据已刷新', 'success');
             });
             
+            // 搜索按钮
             document.getElementById('searchDB')?.addEventListener('click', function() {
                 const searchTerm = prompt('请输入搜索关键词（订单号、备注等）:', '');
                 if (searchTerm) {
@@ -2748,6 +2889,7 @@
                 }
             });
             
+            // 清空数据库按钮
             document.getElementById('clearDB')?.addEventListener('click', async function() {
                 if (confirm('⚠️  警告：确定要清空所有数据吗？此操作不可恢复！')) {
                     if (confirm('请再次确认：真的要清空所有数据吗？')) {
@@ -2756,29 +2898,29 @@
                 }
             });
             
-            document.getElementById('selectExcelFileBtn')?.addEventListener('click', function() {
-                document.getElementById('excelFileInput').click();
-            });
+            // 🛠️ 🔧 修复：Excel文件选择事件 - 防止重复绑定
+            const excelFileInput = document.getElementById('excelFileInput');
+            const selectExcelBtn = document.getElementById('selectExcelFileBtn');
             
-            document.getElementById('excelFileInput')?.addEventListener('change', function(e) {
-                const file = e.target.files[0];
-                const fileNameSpan = document.getElementById('excelFileName');
-                const fileSizeSpan = document.getElementById('fileSize');
-                const importBtn = document.getElementById('startExcelImportBtn');
+            if (selectExcelBtn && !selectExcelBtn.hasAttribute('data-event-bound')) {
+                selectExcelBtn.setAttribute('data-event-bound', 'true');
+                selectExcelBtn.addEventListener('click', function() {
+                    console.log('📁 Excel文件选择按钮被点击');
+                    excelFileInput.click();
+                });
+            }
+            
+            // 🛠️ 🔧 修复：文件选择change事件 - 清理旧的监听器
+            if (excelFileInput) {
+                // 移除所有旧的change事件监听器
+                const newInput = excelFileInput.cloneNode(true);
+                excelFileInput.parentNode.replaceChild(newInput, excelFileInput);
                 
-                if (file) {
-                    fileNameSpan.textContent = file.name;
-                    fileSizeSpan.textContent = formatFileSize(file.size);
-                    importBtn.disabled = false;
-                    
-                    showMessage(`已选择文件: ${file.name} (${formatFileSize(file.size)})`, 'info');
-                } else {
-                    fileNameSpan.textContent = '未选择文件';
-                    fileSizeSpan.textContent = '';
-                    importBtn.disabled = true;
-                }
-            });
+                // 添加新的change事件监听器
+                newInput.addEventListener('change', handleExcelFileSelect);
+            }
             
+            // 开始导入按钮
             document.getElementById('startExcelImportBtn')?.addEventListener('click', async function() {
                 const fileInput = document.getElementById('excelFileInput');
                 if (!fileInput.files[0]) {
@@ -2790,32 +2932,308 @@
                 await startExcelImport(file);
             });
             
+            // 清理数据按钮
             document.getElementById('startCleanupBtn')?.addEventListener('click', async function() {
                 await startDataCleanup();
             });
             
+            // 备份按钮
             document.getElementById('backupData')?.addEventListener('click', function() {
                 backupDatabase();
             });
             
+            // 恢复按钮
             document.getElementById('restoreData')?.addEventListener('click', function() {
                 restoreDatabase();
             });
             
+            // 筛选按钮
             document.getElementById('applyFilter')?.addEventListener('click', function() {
                 applyDatabaseFilter();
             });
             
+            // 重置筛选按钮
             document.getElementById('resetFilter')?.addEventListener('click', function() {
                 resetDatabaseFilter();
             });
             
+            // 全选复选框
             document.getElementById('selectAll')?.addEventListener('change', function(e) {
                 const checkboxes = document.querySelectorAll('.record-checkbox');
                 checkboxes.forEach(cb => {
                     cb.checked = e.target.checked;
                 });
             });
+            
+            // 🛠️ 🔧 新增：分页按钮事件绑定
+            initPaginationSystem();
+            
+            databasePageEventsBound = true;
+            console.log('✅ 数据库页面事件监听器设置完成');
+        }
+        
+        // 🛠️ 🔧 新增：处理Excel文件选择
+        function handleExcelFileSelect(e) {
+            const file = e.target.files[0];
+            const fileNameSpan = document.getElementById('excelFileName');
+            const fileSizeSpan = document.getElementById('fileSize');
+            const importBtn = document.getElementById('startExcelImportBtn');
+            
+            console.log('📁 文件选择事件触发，文件:', file ? file.name : '无');
+            
+            if (file) {
+                fileNameSpan.textContent = file.name;
+                fileSizeSpan.textContent = formatFileSize(file.size);
+                importBtn.disabled = false;
+                
+                showMessage(`已选择文件: ${file.name} (${formatFileSize(file.size)})`, 'info');
+            } else {
+                fileNameSpan.textContent = '未选择文件';
+                fileSizeSpan.textContent = '';
+                importBtn.disabled = true;
+            }
+        }
+        
+        // 🛠️ 🔧 新增：初始化分页系统
+        function initPaginationSystem() {
+            console.log('📄 初始化分页系统...');
+            
+            // 从localStorage加载用户的分页偏好
+            loadPaginationPreferences();
+            
+            // 绑定分页按钮事件
+            bindPaginationEvents();
+            
+            // 更新每页显示数量选择器
+            updatePageSizeSelector();
+            
+            console.log('✅ 分页系统初始化完成');
+        }
+        
+        // 🛠️ 🔧 新增：加载分页偏好设置
+        function loadPaginationPreferences() {
+            try {
+                const savedPageSize = localStorage.getItem('returnUnpackPageSize');
+                if (savedPageSize) {
+                    dbPageSize = parseInt(savedPageSize);
+                    const pageSizeSelect = document.getElementById('pageSize');
+                    if (pageSizeSelect) {
+                        pageSizeSelect.value = dbPageSize;
+                    }
+                }
+            } catch (e) {
+                console.warn('⚠️ 加载分页偏好失败:', e);
+            }
+        }
+        
+        // 🛠️ 🔧 新增：保存分页偏好设置
+        function savePaginationPreferences() {
+            try {
+                localStorage.setItem('returnUnpackPageSize', dbPageSize.toString());
+            } catch (e) {
+                console.warn('⚠️ 保存分页偏好失败:', e);
+            }
+        }
+        
+        // 🛠️ 🔧 新增：绑定分页按钮事件
+        function bindPaginationEvents() {
+            const firstPageBtn = document.getElementById('firstPage');
+            const prevPageBtn = document.getElementById('prevPage');
+            const nextPageBtn = document.getElementById('nextPage');
+            const lastPageBtn = document.getElementById('lastPage');
+            const pageSizeSelect = document.getElementById('pageSize');
+            
+            if (firstPageBtn) {
+                firstPageBtn.addEventListener('click', () => goToPage(1));
+            }
+            
+            if (prevPageBtn) {
+                prevPageBtn.addEventListener('click', () => goToPage(dbCurrentPage - 1));
+            }
+            
+            if (nextPageBtn) {
+                nextPageBtn.addEventListener('click', () => goToPage(dbCurrentPage + 1));
+            }
+            
+            if (lastPageBtn) {
+                lastPageBtn.addEventListener('click', () => {
+                    const totalPages = Math.ceil(dbTotalItems / dbPageSize);
+                    goToPage(totalPages);
+                });
+            }
+            
+            if (pageSizeSelect) {
+                pageSizeSelect.addEventListener('change', function() {
+                    dbPageSize = parseInt(this.value);
+                    savePaginationPreferences();
+                    dbCurrentPage = 1; // 重置到第一页
+                    renderCurrentPage();
+                    console.log(`📄 每页显示数量改为: ${dbPageSize}`);
+                });
+            }
+        }
+        
+        // 🛠️ 🔧 新增：更新每页显示数量选择器
+        function updatePageSizeSelector() {
+            const pageSizeSelect = document.getElementById('pageSize');
+            if (pageSizeSelect) {
+                pageSizeSelect.value = dbPageSize;
+            }
+        }
+        
+        // 🛠️ 🔧 新增：跳转到指定页面
+        function goToPage(pageNumber) {
+            const totalPages = Math.ceil(dbTotalItems / dbPageSize);
+            
+            if (pageNumber < 1) pageNumber = 1;
+            if (pageNumber > totalPages) pageNumber = totalPages;
+            
+            dbCurrentPage = pageNumber;
+            renderCurrentPage();
+            console.log(`📄 跳转到第 ${pageNumber} 页`);
+        }
+        
+        // 🛠️ 🔧 新增：渲染当前页数据
+        function renderCurrentPage() {
+            const dataSource = dbFilteredData || dbAllData;
+            const totalPages = Math.ceil(dbTotalItems / dbPageSize);
+            
+            // 计算当前页的数据范围
+            const startIndex = (dbCurrentPage - 1) * dbPageSize;
+            const endIndex = Math.min(startIndex + dbPageSize, dbTotalItems);
+            const pageData = dataSource.slice(startIndex, endIndex);
+            
+            // 更新表格
+            updateDatabaseTable(pageData);
+            
+            // 更新分页控件
+            updatePaginationControls();
+            
+            // 更新页面信息显示
+            document.getElementById('currentPage').textContent = dbCurrentPage;
+            document.getElementById('totalPages').textContent = totalPages;
+            document.getElementById('totalItems').textContent = dbTotalItems;
+        }
+        
+        // 🛠️ 🔧 新增：更新分页控件状态
+        function updatePaginationControls() {
+            const totalPages = Math.ceil(dbTotalItems / dbPageSize);
+            const firstPageBtn = document.getElementById('firstPage');
+            const prevPageBtn = document.getElementById('prevPage');
+            const nextPageBtn = document.getElementById('nextPage');
+            const lastPageBtn = document.getElementById('lastPage');
+            
+            // 更新按钮状态
+            if (firstPageBtn) {
+                firstPageBtn.disabled = dbCurrentPage <= 1;
+            }
+            if (prevPageBtn) {
+                prevPageBtn.disabled = dbCurrentPage <= 1;
+            }
+            if (nextPageBtn) {
+                nextPageBtn.disabled = dbCurrentPage >= totalPages;
+            }
+            if (lastPageBtn) {
+                lastPageBtn.disabled = dbCurrentPage >= totalPages;
+            }
+        }
+        
+        // 🛠️ 🔧 修改：更新数据库表格函数，添加分页支持
+        function updateDatabaseTable(data) {
+            const tbody = document.getElementById('databaseTableBody');
+            
+            if (!data || data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" style="text-align:center;padding:40px;">
+                            <i class="fas fa-database" style="font-size:48px;color:#ddd;margin-bottom:10px;"></i>
+                            <p>暂无数据</p>
+                            <p style="color:#999;font-size:14px;margin-top:10px;">点击下方"导入Excel数据"按钮导入数据</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            let html = '';
+            data.forEach((record, index) => {
+                const statusClass = getStatusClass(record.status);
+                const damageClass = getDamageClass(record.damage);
+                
+                html += `
+                    <tr>
+                        <td><input type="checkbox" class="record-checkbox" data-id="${record.id}"></td>
+                        <td><strong>${record.orderNumber}</strong></td>
+                        <td>${record.shopName || ''}</td>
+                        <td>${record.scanTime}</td>
+                        <td><span class="${statusClass}">${record.status}</span></td>
+                        <td><span class="${damageClass}">${record.damage}</span></td>
+                        <td>${record.videoFile ? 
+                            `<a href="#" style="color:#4a6ee0;"><i class="fas fa-video"></i> ${record.videoFile}</a>` : 
+                            '<span style="color:#999;">无</span>'}</td>
+                        <td>${record.notes || ''}</td>
+                        <td>
+                            <button class="btn btn-sm" onclick="editRecord('${record.id}')" style="padding:4px 8px; font-size:12px; background:#17a2b8; color:white; margin-right:5px;">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm" onclick="deleteRecord('${record.id}')" style="padding:4px 8px; font-size:12px; background:#dc3545; color:white;">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tbody.innerHTML = html;
+        }
+        
+        // 🛠️ 🔧 修改：加载数据库数据，添加分页支持
+        async function loadDatabaseData() {
+            try {
+                showMessage('正在加载数据...', 'info');
+                
+                let orders = [];
+                
+                if (window.ReturnUnpackSystem && window.ReturnUnpackSystem.modules.database) {
+                    orders = await window.ReturnUnpackSystem.modules.database.getAllOrders();
+                    
+                    const formattedData = orders.map(order => ({
+                        id: order.orderNumber,
+                        orderNumber: order.orderNumber,
+                        shopName: order.shopName || '',
+                        scanTime: order.scanTime ? new Date(order.scanTime).toLocaleString('zh-CN') : '未知',
+                        status: order.status || '待处理',
+                        damage: order.damage || order.damageType || '完好',
+                        videoFile: order.videoData ? `video_${order.orderNumber}.mp4` : null,
+                        notes: order.notes || '',
+                        skuInfo: order.skuInfo || ''
+                    }));
+                    
+                    // 更新全局数据
+                    dbAllData = formattedData;
+                    dbFilteredData = null; // 重置筛选数据
+                    dbTotalItems = formattedData.length;
+                    dbCurrentPage = 1; // 重置到第一页
+                    
+                    // 渲染数据
+                    renderCurrentPage();
+                    updateDatabaseStats(formattedData);
+                } else {
+                    const mockData = generateMockData(15);
+                    dbAllData = mockData;
+                    dbFilteredData = null;
+                    dbTotalItems = mockData.length;
+                    dbCurrentPage = 1;
+                    
+                    renderCurrentPage();
+                    updateDatabaseStats(mockData);
+                }
+                
+                showMessage('数据加载完成', 'success');
+            } catch (error) {
+                console.error('加载数据失败:', error);
+                showMessage('数据加载失败: ' + error.message, 'error');
+            }
         }
         
         // 设置智能扫码输入事件
@@ -3386,44 +3804,7 @@
             showMessage(`播放视频: ${orderNumber}`, 'info');
         }
         
-        // 加载数据库数据
-        async function loadDatabaseData() {
-            try {
-                showMessage('正在加载数据...', 'info');
-                
-                let orders = [];
-                
-                if (window.ReturnUnpackSystem && window.ReturnUnpackSystem.modules.database) {
-                    orders = await window.ReturnUnpackSystem.modules.database.getAllOrders();
-                    
-                    const formattedData = orders.map(order => ({
-                        id: order.orderNumber,
-                        orderNumber: order.orderNumber,
-                        shopName: order.shopName || '',
-                        scanTime: order.scanTime ? new Date(order.scanTime).toLocaleString('zh-CN') : '未知',
-                        status: order.status || '待处理',
-                        damage: order.damage || order.damageType || '完好',
-                        videoFile: order.videoData ? `video_${order.orderNumber}.mp4` : null,
-                        notes: order.notes || '',
-                        skuInfo: order.skuInfo || ''
-                    }));
-                    
-                    updateDatabaseTable(formattedData);
-                    updateDatabaseStats(formattedData);
-                } else {
-                    const mockData = generateMockData(15);
-                    updateDatabaseTable(mockData);
-                    updateDatabaseStats(mockData);
-                }
-                
-                showMessage('数据加载完成', 'success');
-            } catch (error) {
-                console.error('加载数据失败:', error);
-                showMessage('数据加载失败: ' + error.message, 'error');
-            }
-        }
-        
-        // 搜索数据库数据
+        // 🛠️ 🔧 修改：搜索数据库数据，添加分页支持
         async function searchDatabaseData(searchTerm) {
             try {
                 showMessage(`搜索: ${searchTerm}`, 'info');
@@ -3442,7 +3823,13 @@
                         notes: order.notes || ''
                     }));
                     
-                    updateDatabaseTable(formattedData);
+                    // 更新筛选数据
+                    dbFilteredData = formattedData;
+                    dbTotalItems = formattedData.length;
+                    dbCurrentPage = 1; // 重置到第一页
+                    
+                    // 渲染筛选结果
+                    renderCurrentPage();
                     updateDatabaseStats(formattedData);
                     
                     showMessage(`找到 ${results.length} 条记录`, 'success');
@@ -3675,74 +4062,70 @@
             showMessage('数据库恢复功能开发中...', 'info');
         }
         
-        // 应用数据库筛选
+        // 🛠️ 🔧 修改：应用数据库筛选，添加分页支持
         function applyDatabaseFilter() {
             const dateFrom = document.getElementById('filterDateFrom').value;
             const dateTo = document.getElementById('filterDateTo').value;
             const status = document.getElementById('filterStatus').value;
             const damage = document.getElementById('filterDamage').value;
             
+            // 应用筛选逻辑
+            let filtered = dbAllData;
+            
+            if (status) {
+                filtered = filtered.filter(item => item.status === status);
+            }
+            
+            if (damage) {
+                filtered = filtered.filter(item => item.damage === damage);
+            }
+            
+            if (dateFrom) {
+                const fromDate = new Date(dateFrom);
+                filtered = filtered.filter(item => {
+                    const itemDate = new Date(item.scanTime || new Date());
+                    return itemDate >= fromDate;
+                });
+            }
+            
+            if (dateTo) {
+                const toDate = new Date(dateTo);
+                toDate.setHours(23, 59, 59, 999); // 设置为当天结束时间
+                filtered = filtered.filter(item => {
+                    const itemDate = new Date(item.scanTime || new Date());
+                    return itemDate <= toDate;
+                });
+            }
+            
+            // 更新筛选数据
+            dbFilteredData = filtered;
+            dbTotalItems = filtered.length;
+            dbCurrentPage = 1; // 重置到第一页
+            
+            // 渲染筛选结果
+            renderCurrentPage();
+            updateDatabaseStats(filtered);
+            
             showMessage(`应用筛选: ${status || '全部'} | ${damage || '全部'} | ${dateFrom || '不限'} 至 ${dateTo || '不限'}`, 'info');
         }
         
-        // 重置数据库筛选
+        // 🛠️ 🔧 修改：重置数据库筛选，添加分页支持
         function resetDatabaseFilter() {
             document.getElementById('filterDateFrom').value = '';
             document.getElementById('filterDateTo').value = '';
             document.getElementById('filterStatus').value = '';
             document.getElementById('filterDamage').value = '';
             
-            loadDatabaseData();
+            // 重置筛选数据
+            dbFilteredData = null;
+            dbTotalItems = dbAllData.length;
+            dbCurrentPage = 1; // 重置到第一页
+            
+            // 渲染所有数据
+            renderCurrentPage();
+            updateDatabaseStats(dbAllData);
+            
             showMessage('筛选条件已重置', 'info');
-        }
-        
-        // 更新数据库表格
-        function updateDatabaseTable(data) {
-            const tbody = document.getElementById('databaseTableBody');
-            
-            if (!data || data.length === 0) {
-                tbody.innerHTML = `
-                    <tr>
-                        <td colspan="9" style="text-align:center;padding:40px;">
-                            <i class="fas fa-database" style="font-size:48px;color:#ddd;margin-bottom:10px;"></i>
-                            <p>暂无数据</p>
-                            <p style="color:#999;font-size:14px;margin-top:10px;">点击下方"导入Excel数据"按钮导入数据</p>
-                        </td>
-                    </tr>
-                `;
-                return;
-            }
-            
-            let html = '';
-            data.forEach((record, index) => {
-                const statusClass = getStatusClass(record.status);
-                const damageClass = getDamageClass(record.damage);
-                
-                html += `
-                    <tr>
-                        <td><input type="checkbox" class="record-checkbox" data-id="${record.id}"></td>
-                        <td><strong>${record.orderNumber}</strong></td>
-                        <td>${record.shopName || ''}</td>
-                        <td>${record.scanTime}</td>
-                        <td><span class="${statusClass}">${record.status}</span></td>
-                        <td><span class="${damageClass}">${record.damage}</span></td>
-                        <td>${record.videoFile ? 
-                            `<a href="#" style="color:#4a6ee0;"><i class="fas fa-video"></i> ${record.videoFile}</a>` : 
-                            '<span style="color:#999;">无</span>'}</td>
-                        <td>${record.notes || ''}</td>
-                        <td>
-                            <button class="btn btn-sm" onclick="editRecord('${record.id}')" style="padding:4px 8px; font-size:12px; background:#17a2b8; color:white; margin-right:5px;">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="btn btn-sm" onclick="deleteRecord('${record.id}')" style="padding:4px 8px; font-size:12px; background:#dc3545; color:white;">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            });
-            
-            tbody.innerHTML = html;
         }
         
         // 更新数据库统计
@@ -3838,7 +4221,7 @@
         }
         
         // 显示消息通知
-        function showMessage(message, type = 'info') {
+        function showMessage(message, type = 'info', duration = 3000) {
             console.log(`${type}: ${message}`);
             
             const statusText = document.getElementById('statusText');
@@ -3875,7 +4258,7 @@
                         notification.parentNode.removeChild(notification);
                     }
                 }, 300);
-            }, 3000);
+            }, duration);
         }
         
         // 辅助函数
