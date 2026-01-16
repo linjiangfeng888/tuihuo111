@@ -1,0 +1,3910 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>退货拆包记录系统</title>
+    <style>
+        /* 基础样式 - 保持不变 */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Noto Sans SC', sans-serif;
+        }
+        
+        body {
+            background-color: #f5f7fa;
+            color: #333;
+            min-height: 100vh;
+        }
+        
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* 顶部标题栏 */
+        .app-header {
+            background: linear-gradient(135deg, #4a6ee0 0%, #6a8eff 100%);
+            color: white;
+            padding: 15px 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 12px rgba(74, 110, 224, 0.2);
+        }
+        
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .header-left i {
+            font-size: 28px;
+        }
+        
+        .header-left h1 {
+            font-size: 22px;
+            font-weight: 600;
+        }
+        
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 6px 12px;
+            border-radius: 20px;
+        }
+        
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            background-color: #4cd964;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .current-time {
+            font-family: monospace;
+            font-size: 18px;
+            font-weight: 500;
+        }
+        
+        /* 主内容区域 */
+        .main-content {
+            flex: 1;
+            display: flex;
+            padding: 20px;
+            gap: 20px;
+            overflow: hidden;
+        }
+        
+        .left-panel, .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        }
+        
+        .card h2 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card h2 i {
+            color: #4a6ee0;
+        }
+        
+        /* 扫码区域 */
+        .input-group {
+            margin-bottom: 15px;
+        }
+        
+        .input-with-icon {
+            position: relative;
+            margin-bottom: 15px;
+        }
+        
+        .input-with-icon i {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #666;
+        }
+        
+        .input-with-icon input {
+            width: 100%;
+            padding: 15px 15px 15px 45px;
+            border: 2px solid #e1e5eb;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        
+        .input-with-icon input:focus {
+            border-color: #4a6ee0;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(74, 110, 224, 0.1);
+        }
+        
+        .input-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #4a6ee0 0%, #6a8eff 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(74, 110, 224, 0.3);
+        }
+        
+        .btn-secondary {
+            background: #f8f9fa;
+            color: #495057;
+            border: 1px solid #dee2e6;
+        }
+        
+        .btn-secondary:hover {
+            background: #e9ecef;
+        }
+        
+        .scan-hint {
+            background: #f8f9ff;
+            padding: 10px 15px;
+            border-radius: 8px;
+            color: #6c757d;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        /* 订单信息 - 修改后的样式 */
+        .order-details {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .detail-row {
+            display: flex;
+            align-items: flex-start;
+            min-height: 40px;
+        }
+        
+        .detail-label {
+            width: 100px;
+            color: #6c757d;
+            font-weight: 500;
+            line-height: 1.5;
+        }
+        
+        .detail-value {
+            flex: 1;
+            font-weight: 500;
+            line-height: 1.5;
+            word-break: break-word;
+        }
+        
+        .detail-value.highlight {
+            color: #4a6ee0;
+            font-weight: 600;
+        }
+        
+        .status-pending {
+            color: #ff9500;
+            background: #fff4e6;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            display: inline-block;
+        }
+        
+        .damage-tags {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .tag {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .tag-good {
+            background: #e7f5ff;
+            color: #339af0;
+            border: 1px solid #a5d8ff;
+        }
+        
+        .tag-damaged {
+            background: #fff5f5;
+            color: #fa5252;
+            border: 1px solid #ffc9c9;
+        }
+        
+        .tag-missing {
+            background: #fff9db;
+            color: #fab005;
+            border: 1px solid #ffec99;
+        }
+        
+        .tag-other {
+            background: #f8f9fa;
+            color: #868e96;
+            border: 1px solid #e9ecef;
+        }
+        
+        .tag.active {
+            transform: scale(1.05);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        #orderNotes {
+            width: 100%;
+            height: 80px;
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        
+        /* 统计信息 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        
+        .stat-item {
+            background: #f8f9ff;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            border: 1px solid #e9ecef;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #4a6ee0;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            color: #6c757d;
+            font-size: 14px;
+        }
+        
+        /* 🛠️ 修复6：视频录制区域 - 改为正方形比例 */
+        .video-container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .video-preview {
+            position: relative;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            height: 400px; /* 🛠️ 修复：改为固定高度 */
+            width: 400px;  /* 🛠️ 修复：添加宽度，形成正方形 */
+            margin: 0 auto; /* 居中显示 */
+        }
+        
+        .no-camera {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #999;
+            background: #1a1a1a;
+        }
+        
+        .no-camera i {
+            font-size: 60px;
+            margin-bottom: 15px;
+        }
+        
+        .video-controls {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        
+        .timer-display {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 20px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .btn-record {
+            background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%);
+            color: white;
+        }
+        
+        .btn-pause {
+            background: #ffa502;
+            color: white;
+        }
+        
+        .btn-stop {
+            background: #2ed573;
+            color: white;
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+        
+        .recording-status {
+            flex: 1;
+            text-align: right;
+            color: #666;
+            font-weight: 500;
+        }
+        
+        /* 设置区域 */
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .setting-item label {
+            color: #495057;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .setting-item input,
+        .setting-item select {
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        .path-display {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+            color: #666;
+        }
+        
+        .setting-toggle {
+            margin-top: 10px;
+        }
+        
+        .toggle-switch {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        .toggle-switch input {
+            display: none;
+        }
+        
+        .toggle-slider {
+            width: 50px;
+            height: 24px;
+            background-color: #ccc;
+            border-radius: 24px;
+            position: relative;
+            transition: all 0.3s;
+            margin-right: 10px;
+        }
+        
+        .toggle-slider:before {
+            content: "";
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background-color: white;
+            top: 2px;
+            left: 2px;
+            transition: all 0.3s;
+        }
+        
+        .toggle-switch input:checked + .toggle-slider {
+            background-color: #4a6ee0;
+        }
+        
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
+        
+        /* 最近录制区域 */
+        .recent-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #adb5bd;
+        }
+        
+        .empty-state i {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+        
+        /* 底部导航 */
+        .app-footer {
+            background: white;
+            border-top: 1px solid #e9ecef;
+            padding: 10px 20px;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.05);
+        }
+        
+        .footer-nav {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .nav-btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            background: white;
+            color: #666;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid #e9ecef;
+        }
+        
+        .nav-btn:hover {
+            background: #f8f9ff;
+            color: #4a6ee0;
+            border-color: #4a6ee0;
+            transform: translateY(-2px);
+        }
+        
+        .nav-btn.active {
+            background: #4a6ee0;
+            color: white;
+            border-color: #4a6ee0;
+        }
+        
+        .nav-btn i {
+            font-size: 16px;
+        }
+        
+        /* 页面切换容器 */
+        .page-container {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: white;
+            z-index: 1000;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .page-container.active {
+            display: block;
+        }
+        
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .close-page {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+            padding: 5px 15px;
+        }
+        
+        .close-page:hover {
+            color: #333;
+        }
+        
+        .page-content {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        /* 数据库页面额外样式 */
+        .btn-warning {
+            background: linear-gradient(135deg, #ff9500 0%, #ffcc00 100%);
+            color: white;
+        }
+        
+        .btn-success {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #dc3545 0%, #ff6b6b 100%);
+            color: white;
+        }
+        
+        .btn-warning:hover, .btn-success:hover, .btn-danger:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        
+        /* 数据库页面样式 */
+        .database-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+        
+        .database-table th,
+        .database-table td {
+            border: 1px solid #e1e5eb;
+            padding: 12px 8px;
+            text-align: left;
+            vertical-align: middle;
+        }
+        
+        .database-table th {
+            background-color: #f8f9ff;
+            font-weight: 600;
+            color: #2c3e50;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        .database-table tr:hover {
+            background-color: #f8f9ff;
+        }
+        
+        .database-table td {
+            color: #495057;
+        }
+        
+        .database-table .btn-sm {
+            padding: 4px 8px;
+            font-size: 12px;
+            min-width: auto;
+        }
+        
+        /* 导入区域新样式 */
+        .import-section {
+            margin-top: 40px;
+            padding: 25px;
+            border: 1px solid #e1e5eb;
+            border-radius: 12px;
+            background-color: #f8f9ff;
+        }
+        
+        .import-section h3 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .excel-import-card {
+            background: white;
+            border: 2px solid #e7f5ff;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .excel-import-card h4 {
+            color: #339af0;
+            margin-bottom: 15px;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .field-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin: 15px 0;
+            padding: 15px;
+            background: #f8f9ff;
+            border-radius: 8px;
+        }
+        
+        .field-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #495057;
+        }
+        
+        .field-item i {
+            color: #4a6ee0;
+        }
+        
+        .import-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-top: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e1e5eb;
+        }
+        
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 10px 15px;
+            background: #f8f9ff;
+            border-radius: 6px;
+            border: 1px solid #e1e5eb;
+            min-width: 200px;
+        }
+        
+        .file-info i {
+            color: #28a745;
+        }
+        
+        .strategy-select {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 15px;
+            background: #f8f9ff;
+            border-radius: 6px;
+            border: 1px solid #e1e5eb;
+        }
+        
+        .strategy-select select {
+            padding: 8px 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            background: white;
+            font-size: 14px;
+            min-width: 180px;
+        }
+        
+        /* 进度条样式 */
+        .import-progress {
+            margin-top: 20px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e1e5eb;
+            display: none;
+        }
+        
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .progress-bar-container {
+            height: 20px;
+            background-color: #e9ecef;
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4a6ee0, #6a8eff);
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+        
+        .progress-details {
+            display: flex;
+            justify-content: space-between;
+            color: #6c757d;
+            font-size: 13px;
+            margin-top: 5px;
+        }
+        
+        /* 结果展示样式 */
+        .import-result {
+            margin-top: 20px;
+            display: none;
+        }
+        
+        .result-card {
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid transparent;
+        }
+        
+        .result-success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        
+        .result-error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        
+        .stats-grid-small {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin: 15px 0;
+        }
+        
+        .stat-card-small {
+            text-align: center;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e1e5eb;
+        }
+        
+        .stat-value-small {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .stat-label-small {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        /* 数据清理区域 */
+        .cleanup-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #fff5f5;
+            border: 2px dashed #ffc9c9;
+            border-radius: 10px;
+        }
+        
+        .cleanup-section h4 {
+            color: #fa5252;
+            margin-bottom: 15px;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .cleanup-controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-top: 15px;
+        }
+        
+        .cleanup-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 15px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #ffc9c9;
+        }
+        
+        .warning-text {
+            color: #e8590c;
+            font-size: 13px;
+            margin-top: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 1024px) {
+            .main-content {
+                flex-direction: column;
+            }
+            
+            .left-panel, .right-panel {
+                width: 100%;
+            }
+            
+            .settings-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
+            
+            .import-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .app-header {
+                flex-direction: column;
+                gap: 15px;
+                text-align: center;
+                padding: 15px;
+            }
+            
+            .header-right {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .control-buttons {
+                justify-content: center;
+            }
+            
+            .video-controls {
+                flex-direction: column;
+            }
+            
+            .footer-nav {
+                flex-direction: column;
+            }
+            
+            .nav-btn {
+                width: 100%;
+                justify-content: center;
+            }
+            
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .stats-grid-small {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .database-table th, 
+            .database-table td {
+                padding: 8px 6px;
+                font-size: 13px;
+            }
+            
+            /* 🛠️ 修复6：在移动端保持正方形但稍小 */
+            .video-preview {
+                height: 300px;
+                width: 300px;
+            }
+        }
+        
+        /* 新消息通知样式 */
+        .notification {
+            position: fixed;
+            top: 100px;
+            right: 20px;
+            padding: 12px 20px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            z-index: 9999;
+            animation: slideIn 0.3s ease;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            max-width: 300px;
+        }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+        
+        .notification-success {
+            background-color: #28a745;
+        }
+        
+        .notification-error {
+            background-color: #dc3545;
+        }
+        
+        .notification-info {
+            background-color: #17a2b8;
+        }
+        
+        .notification-warning {
+            background-color: #ffc107;
+        }
+        
+        .status-processed {
+            color: #28a745;
+            background: #e6fcf5;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            display: inline-block;
+        }
+        
+        .status-returned {
+            color: #868e96;
+            background: #f8f9fa;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            display: inline-block;
+        }
+        
+        /* 隐藏元素 */
+        .hidden {
+            display: none !important;
+        }
+        
+        /* 新增订单详情样式 */
+        .order-detail-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        }
+        
+        .order-detail-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .order-detail-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2c3e50;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .order-detail-body {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .order-detail-group {
+            margin-bottom: 15px;
+        }
+        
+        .order-detail-label {
+            font-size: 14px;
+            color: #6c757d;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        .order-detail-value {
+            font-size: 15px;
+            color: #333;
+            padding: 8px 12px;
+            background: #f8f9ff;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+            word-break: break-all;
+        }
+        
+        .sku-info-container {
+            max-height: 150px;
+            overflow-y: auto;
+            padding: 10px;
+            background: #f8f9ff;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .damage-selection {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+        
+        .damage-btn {
+            padding: 8px 16px;
+            border: 2px solid #e9ecef;
+            background: white;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+        
+        .damage-btn:hover {
+            border-color: #4a6ee0;
+        }
+        
+        .damage-btn.selected {
+            background: #4a6ee0;
+            color: white;
+            border-color: #4a6ee0;
+        }
+        
+        .damage-btn.good.selected {
+            background: #28a745;
+            border-color: #28a745;
+        }
+        
+        .damage-btn.damaged.selected {
+            background: #dc3545;
+            border-color: #dc3545;
+        }
+        
+        .damage-btn.missing.selected {
+            background: #ffc107;
+            border-color: #ffc107;
+            color: #212529;
+        }
+        
+        .damage-btn.other.selected {
+            background: #6c757d;
+            border-color: #6c757d;
+        }
+        
+        .notes-textarea {
+            width: 100%;
+            height: 80px;
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            resize: vertical;
+            min-height: 80px;
+            font-family: inherit;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #e9ecef;
+        }
+        
+        .order-search-results {
+            position: absolute;
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 100;
+            margin-top: 5px;
+            width: 100%;
+            display: none;
+        }
+        
+        .search-result-item {
+            padding: 12px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid #f8f9fa;
+            transition: background 0.2s;
+        }
+        
+        .search-result-item:hover {
+            background: #f8f9ff;
+        }
+        
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
+        
+        .search-result-item .order-number {
+            font-weight: 600;
+            color: #4a6ee0;
+        }
+        
+        .search-result-item .shop-name {
+            font-size: 13px;
+            color: #666;
+            margin-top: 3px;
+        }
+        
+        .search-result-item .express-number {
+            font-size: 13px;
+            color: #28a745;
+            margin-top: 3px;
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- 顶部标题栏 -->
+        <header class="app-header">
+            <div class="header-left">
+                <i class="fas fa-box-open"></i>
+                <h1>退货拆包记录系统</h1>
+            </div>
+            <div class="header-right">
+                <div class="system-status">
+                    <span class="status-indicator online"></span>
+                    <span class="status-text" id="statusText">系统就绪</span>
+                </div>
+                <div class="current-time" id="currentTime">--:--:--</div>
+            </div>
+        </header>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <!-- 左侧功能区 -->
+            <div class="left-panel">
+                <!-- 扫码输入区域 -->
+                <div class="card scan-section">
+                    <h2><i class="fas fa-barcode"></i> 扫码录入</h2>
+                    <div class="input-group">
+                        <div class="input-with-icon">
+                            <i class="fas fa-qrcode"></i>
+                            <input type="text" 
+                                   id="orderInput" 
+                                   placeholder="请扫描快递单号、订单号或手动输入"
+                                   autocomplete="off"
+                                   autocapitalize="off"
+                                   autocorrect="off">
+                            <div class="order-search-results" id="orderSearchResults"></div>
+                        </div>
+                        <div class="input-actions">
+                            <button id="scanButton" class="btn btn-primary">
+                                <i class="fas fa-camera"></i> 扫码录入
+                            </button>
+                            <button id="manualButton" class="btn btn-secondary">
+                                <i class="fas fa-keyboard"></i> 手动输入
+                            </button>
+                        </div>
+                    </div>
+                    <div class="scan-hint">
+                        <i class="fas fa-lightbulb"></i> 提示：支持扫描或输入订单号、发货运单号、退货运单号
+                    </div>
+                </div>
+
+                <!-- 订单信息显示 - 修改为详情卡片 -->
+                <div id="orderDetailCard" class="order-detail-card" style="display: none;">
+                    <div class="order-detail-header">
+                        <h2 class="order-detail-title"><i class="fas fa-clipboard-list"></i> 订单详情</h2>
+                        <button id="closeOrderDetail" class="btn btn-secondary btn-sm">
+                            <i class="fas fa-times"></i> 关闭
+                        </button>
+                    </div>
+                    
+                    <div class="order-detail-body">
+                        <div class="order-detail-group">
+                            <div class="order-detail-label">订单编号</div>
+                            <div id="detailOrderNumber" class="order-detail-value highlight"></div>
+                        </div>
+                        
+                        <div class="order-detail-group">
+                            <div class="order-detail-label">店铺名称</div>
+                            <div id="detailShopName" class="order-detail-value"></div>
+                        </div>
+                        
+                        <div class="order-detail-group">
+                            <div class="order-detail-label">发货运单号</div>
+                            <div id="detailExpressNumber" class="order-detail-value"></div>
+                        </div>
+                        
+                        <div class="order-detail-group">
+                            <div class="order-detail-label">退货运单号</div>
+                            <div id="detailTrackingNumber" class="order-detail-value"></div>
+                        </div>
+                        
+                        <div class="order-detail-group" style="grid-column: span 2;">
+                            <div class="order-detail-label">SKU信息</div>
+                            <div id="detailSkuInfo" class="sku-info-container"></div>
+                        </div>
+                        
+                        <div class="order-detail-group" style="grid-column: span 2;">
+                            <div class="order-detail-label">损坏情况</div>
+                            <div class="damage-selection">
+                                <button class="damage-btn good" data-damage="完好">完好</button>
+                                <button class="damage-btn damaged" data-damage="破损">破损</button>
+                                <button class="damage-btn missing" data-damage="缺件">缺件</button>
+                                <button class="damage-btn other" data-damage="其他">其他</button>
+                            </div>
+                        </div>
+                        
+                        <div class="order-detail-group" style="grid-column: span 2;">
+                            <div class="order-detail-label">备注</div>
+                            <textarea id="detailOrderNotes" class="notes-textarea" placeholder="添加备注..."></textarea>
+                            <button id="saveOrderNotes" class="btn btn-primary btn-sm" style="margin-top: 10px;">
+                                <i class="fas fa-save"></i> 保存备注
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button id="startVideoRecording" class="btn btn-danger">
+                            <i class="fas fa-video"></i> 开始录制
+                        </button>
+                        <button id="stopVideoRecording" class="btn btn-secondary" disabled>
+                            <i class="fas fa-stop"></i> 停止录制
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 统计信息 -->
+                <div class="card stats-section">
+                    <h2><i class="fas fa-chart-bar"></i> 今日统计</h2>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value" id="todayTotal">0</div>
+                            <div class="stat-label">总订单</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="todayProcessed">0</div>
+                            <div class="stat-label">已处理</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="todayDamaged">0</div>
+                            <div class="stat-label">损坏</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value" id="todayVideos">0</div>
+                            <div class="stat-label">视频</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右侧录制区域 -->
+            <div class="right-panel">
+                <!-- 视频预览区域 -->
+                <div class="card video-section">
+                    <h2><i class="fas fa-video"></i> 视频录制</h2>
+                    <div class="video-container">
+                        <div class="video-preview" id="videoPreview">
+                            <div class="no-camera">
+                                <i class="fas fa-video-slash"></i>
+                                <p>摄像头未连接</p>
+                            </div>
+                            <video id="cameraFeed" autoplay playsinline muted style="transform: scaleX(1);"></video>
+                        </div>
+                        <div class="video-controls">
+                            <div class="timer-display">
+                                <i class="fas fa-clock"></i>
+                                <span id="recordingTimer">00:00</span>
+                            </div>
+                            <div class="control-buttons">
+                                <button id="recordButton" class="btn btn-record" disabled>
+                                    <i class="fas fa-circle"></i> 开始录制
+                                </button>
+                                <button id="pauseButton" class="btn btn-pause" disabled>
+                                    <i class="fas fa-pause"></i> 暂停
+                                </button>
+                                <button id="stopButton" class="btn btn-stop" disabled>
+                                    <i class="fas fa-stop"></i> 停止
+                                </button>
+                                <button id="cameraButton" class="btn btn-secondary">
+                                    <i class="fas fa-camera"></i> 拍照
+                                </button>
+                            </div>
+                            <div class="recording-status">
+                                <span id="recordingStatus">准备就绪</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 录制设置 -->
+                <div class="card settings-section">
+                    <h2><i class="fas fa-cog"></i> 录制设置</h2>
+                    <div class="settings-grid">
+                        <div class="setting-item">
+                            <label for="recordingDuration">
+                                <i class="fas fa-hourglass-half"></i> 录制时长（秒）
+                            </label>
+                            <input type="number" id="recordingDuration" min="10" max="600" value="30">
+                        </div>
+                        <div class="setting-item">
+                            <label for="videoQuality">
+                                <i class="fas fa-hd"></i> 视频质量
+                            </label>
+                            <select id="videoQuality">
+                                <option value="low">低质量</option>
+                                <option value="medium" selected>中等质量</option>
+                                <option value="high">高质量</option>
+                                <option value="max">最高质量</option>
+                            </select>
+                        </div>
+                        <div class="setting-item">
+                            <label for="cameraSelect">
+                                <i class="fas fa-camera"></i> 选择摄像头
+                            </label>
+                            <select id="cameraSelect">
+                                <option value="">正在检测摄像头...</option>
+                            </select>
+                        </div>
+                        <div class="setting-item">
+                            <label>
+                                <i class="fas fa-folder"></i> 保存路径
+                            </label>
+                            <div class="path-display">退货拆包视频/</div>
+                        </div>
+                    </div>
+                    <div class="setting-toggle">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="autoStartRecording" checked>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">扫码后自动开始录制</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- 最近录制记录 -->
+                <div class="card recent-section">
+                    <h2><i class="fas fa-history"></i> 最近录制</h2>
+                    <div class="recent-list" id="recentList">
+                        <div class="empty-state">
+                            <i class="fas fa-film"></i>
+                            <p>暂无录制记录</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 底部导航 -->
+        <footer class="app-footer">
+            <div class="footer-nav">
+                <button class="nav-btn active" data-page="home">
+                    <i class="fas fa-home"></i> 主页
+                </button>
+                <button class="nav-btn" data-page="database">
+                    <i class="fas fa-database"></i> 数据库
+                </button>
+                <button class="nav-btn" data-page="export">
+                    <i class="fas fa-file-export"></i> 导出
+                </button>
+                <button class="nav-btn" data-page="settings">
+                    <i class="fas fa-sliders-h"></i> 设置
+                </button>
+                <button class="nav-btn" data-page="help">
+                    <i class="fas fa-question-circle"></i> 帮助
+                </button>
+            </div>
+        </footer>
+    </div>
+
+    <!-- 页面切换容器 -->
+    <div class="page-container" id="pageContainer">
+        <!-- 数据库页面 - 优化版 -->
+        <div id="databasePage" class="page" style="display:none;">
+            <div class="page-header">
+                <h2><i class="fas fa-database"></i> 数据库管理</h2>
+                <button class="close-page" data-page="home">× 关闭</button>
+            </div>
+            <div class="page-content">
+                <!-- 数据库控制按钮 -->
+                <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px;">
+                    <button class="btn btn-primary" id="refreshDB">
+                        <i class="fas fa-sync-alt"></i> 刷新数据
+                    </button>
+                    <button class="btn btn-secondary" id="searchDB">
+                        <i class="fas fa-search"></i> 搜索
+                    </button>
+                    <button class="btn btn-danger" id="clearDB">
+                        <i class="fas fa-trash"></i> 清空数据
+                    </button>
+                </div>
+                
+                <!-- 搜索和过滤区域 -->
+                <div style="margin:20px 0; padding:15px; background:#f8f9ff; border-radius:8px;">
+                    <div style="display:flex; gap:15px; align-items:center; flex-wrap:wrap;">
+                        <div>
+                            <label style="margin-right:10px;"><i class="fas fa-calendar"></i> 日期范围:</label>
+                            <input type="date" id="filterDateFrom" style="padding:8px; border:1px solid #ddd; border-radius:4px;">
+                            <span style="margin:0 10px;">至</span>
+                            <input type="date" id="filterDateTo" style="padding:8px; border:1px solid #ddd; border-radius:4px;">
+                        </div>
+                        
+                        <div>
+                            <label style="margin-right:10px;"><i class="fas fa-tag"></i> 状态:</label>
+                            <select id="filterStatus" style="padding:8px; border:1px solid #ddd; border-radius:4px;">
+                                <option value="">全部</option>
+                                <option value="待处理">待处理</option>
+                                <option value="已处理">已处理</option>
+                                <option value="已退回">已退回</option>
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label style="margin-right:10px;"><i class="fas fa-exclamation-triangle"></i> 损坏情况:</label>
+                            <select id="filterDamage" style="padding:8px; border:1px solid #ddd; border-radius:4px;">
+                                <option value="">全部</option>
+                                <option value="完好">完好</option>
+                                <option value="破损">破损</option>
+                                <option value="缺件">缺件</option>
+                                <option value="其他">其他</option>
+                            </select>
+                        </div>
+                        
+                        <button class="btn btn-primary" id="applyFilter">
+                            <i class="fas fa-filter"></i> 应用筛选
+                        </button>
+                        <button class="btn btn-secondary" id="resetFilter">
+                            <i class="fas fa-redo"></i> 重置
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 数据统计摘要 -->
+                <div style="display:flex; gap:15px; margin-bottom:20px; flex-wrap:wrap;">
+                    <div class="stat-card" style="flex:1; min-width:120px; background:#e7f5ff; padding:15px; border-radius:8px; text-align:center;">
+                        <div style="font-size:24px; font-weight:bold; color:#339af0;" id="totalRecords">0</div>
+                        <div style="color:#666;">总记录数</div>
+                    </div>
+                    <div class="stat-card" style="flex:1; min-width:120px; background:#fff5f5; padding:15px; border-radius:8px; text-align:center;">
+                        <div style="font-size:24px; font-weight:bold; color:#fa5252;" id="damagedRecords">0</div>
+                        <div style="color:#666;">损坏记录</div>
+                    </div>
+                    <div class="stat-card" style="flex:1; min-width:120px; background:#fff9db; padding:15px; border-radius:8px; text-align:center;">
+                        <div style="font-size:24px; font-weight:bold; color:#fab005;" id="pendingRecords">0</div>
+                        <div style="color:#666;">待处理</div>
+                    </div>
+                    <div class="stat-card" style="flex:1; min-width:120px; background:#e6fcf5; padding:15px; border-radius:8px; text-align:center;">
+                        <div style="font-size:24px; font-weight:bold; color:#20c997;" id="processedRecords">0</div>
+                        <div style="color:#666;">已处理</div>
+                    </div>
+                </div>
+                
+                <!-- 数据库表格 -->
+                <div class="database-table-container">
+                    <table class="database-table">
+                        <thead>
+                            <tr>
+                                <th style="width:50px;">
+                                    <input type="checkbox" id="selectAll">
+                                </th>
+                                <th style="width:150px;">订单号</th>
+                                <th style="width:120px;">店铺名称</th>
+                                <th style="width:180px;">扫描时间</th>
+                                <th style="width:100px;">状态</th>
+                                <th style="width:100px;">损坏情况</th>
+                                <th style="width:150px;">视频文件</th>
+                                <th style="min-width:200px;">备注</th>
+                                <th style="width:120px;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="databaseTableBody">
+                            <tr>
+                                <td colspan="9" style="text-align:center;padding:40px;">
+                                    <i class="fas fa-database" style="font-size:48px;color:#ddd;margin-bottom:10px;"></i>
+                                    <p>暂无数据</p>
+                                    <p style="color:#999;font-size:14px;margin-top:10px;">点击下方"导入Excel数据"按钮导入数据</p>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- 分页控制 -->
+                <div class="pagination-controls" style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; padding-top:15px; border-top:1px solid #eee;">
+                    <div class="page-info" style="color:#666;">
+                        显示 <span id="currentPage">1</span>/<span id="totalPages">1</span> 页, 
+                        共 <span id="totalItems">0</span> 条记录
+                    </div>
+                    <div class="pagination-buttons" style="display:flex; gap:5px;">
+                        <button class="btn btn-secondary" id="firstPage" disabled>
+                            <i class="fas fa-angle-double-left"></i>
+                        </button>
+                        <button class="btn btn-secondary" id="prevPage" disabled>
+                            <i class="fas fa-angle-left"></i>
+                        </button>
+                        <button class="btn btn-secondary" id="nextPage" disabled>
+                            <i class="fas fa-angle-right"></i>
+                        </button>
+                        <button class="btn btn-secondary" id="lastPage" disabled>
+                            <i class="fas fa-angle-double-right"></i>
+                        </button>
+                    </div>
+                    <div class="page-size" style="display:flex; align-items:center; gap:10px;">
+                        <span style="color:#666;">每页显示:</span>
+                        <select id="pageSize" style="padding:6px; border:1px solid #ddd; border-radius:4px;">
+                            <option value="10">10条</option>
+                            <option value="20" selected>20条</option>
+                            <option value="50">50条</option>
+                            <option value="100">100条</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- =============== 数据导入区域 =============== -->
+                <div class="import-section">
+                    <h3><i class="fas fa-file-import"></i> Excel数据导入</h3>
+                    
+                    <!-- Excel导入卡片 -->
+                    <div class="excel-import-card">
+                        <h4><i class="fas fa-file-excel"></i> 支持Excel 25列售后表格导入</h4>
+                        <p style="color:#666; margin-bottom:15px;">系统会自动从您的售后表格中提取6个关键字段：</p>
+                        
+                        <div class="field-list">
+                            <div class="field-item">
+                                <i class="fas fa-hashtag"></i>
+                                <span>订单编号（主键）</span>
+                            </div>
+                            <div class="field-item">
+                                <i class="fas fa-shipping-fast"></i>
+                                <span>发货运单号（扫码用）</span>
+                            </div>
+                            <div class="field-item">
+                                <i class="fas fa-truck"></i>
+                                <span>退货运单号（退货追踪）</span>
+                            </div>
+                            <div class="field-item">
+                                <i class="fas fa-barcode"></i>
+                                <span>SKU信息（商品规格）</span>
+                            </div>
+                            <div class="field-item">
+                                <i class="fas fa-sticky-note"></i>
+                                <span>备注（附加信息）</span>
+                            </div>
+                            <div class="field-item">
+                                <i class="fas fa-store"></i>
+                                <span>店铺名字（店铺标识）</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 导入控制区 -->
+                    <div class="import-controls">
+                        <!-- 文件选择 -->
+                        <div>
+                            <input type="file" id="excelFileInput" accept=".xlsx,.xls,.csv" style="display:none;">
+                            <button class="btn btn-primary" id="selectExcelFileBtn">
+                                <i class="fas fa-file-excel"></i> 选择Excel文件
+                            </button>
+                        </div>
+                        
+                        <!-- 文件信息显示 -->
+                        <div class="file-info">
+                            <i class="fas fa-file"></i>
+                            <span id="excelFileName">未选择文件</span>
+                            <span id="fileSize" style="color:#999; font-size:12px;"></span>
+                        </div>
+                        
+                        <!-- 合并策略选择 -->
+                        <div class="strategy-select">
+                            <label style="white-space:nowrap;">合并策略:</label>
+                            <select id="mergeStrategy">
+                                <option value="fill_blanks">智能合并（只填空白字段）</option>
+                                <option value="update_all">覆盖所有字段</option>
+                                <option value="skip_duplicates">跳过重复记录</option>
+                            </select>
+                        </div>
+                        
+                        <!-- 开始导入按钮 -->
+                        <button class="btn btn-success" id="startExcelImportBtn" disabled>
+                            <i class="fas fa-upload"></i> 开始导入
+                        </button>
+                    </div>
+                    
+                    <!-- 导入进度显示 -->
+                    <div class="import-progress" id="importProgress">
+                        <div class="progress-header">
+                            <span>导入进度</span>
+                            <span id="progressPercent">0%</span>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar-fill" id="progressBar"></div>
+                        </div>
+                        <div class="progress-details">
+                            <span id="progressStatus">准备导入...</span>
+                            <span id="progressCount">0/0</span>
+                        </div>
+                    </div>
+                    
+                    <!-- 导入结果展示 -->
+                    <div class="import-result" id="importResult">
+                        <div id="resultMessage" class="result-card">
+                            <!-- 结果内容会动态插入 -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 数据备份区域 -->
+                <div style="margin-top:30px; padding:15px; border:1px dashed #ddd; border-radius:8px;">
+                    <h4><i class="fas fa-save"></i> 数据备份</h4>
+                    <div style="display:flex; gap:10px; margin-top:10px;">
+                        <button class="btn btn-secondary" id="backupData">
+                            <i class="fas fa-download"></i> 备份数据库
+                        </button>
+                        <button class="btn btn-secondary" id="restoreData">
+                            <i class="fas fa-upload"></i> 恢复备份
+                        </button>
+                        <div style="flex:1; text-align:right; color:#666; font-size:14px;">
+                            最后备份: <span id="lastBackupTime">从未备份</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- =============== 数据清理区域 =============== -->
+                <div class="cleanup-section">
+                    <h4><i class="fas fa-trash-alt"></i> 数据清理</h4>
+                    <p style="color:#666;">清理超过指定天数的旧数据，释放存储空间</p>
+                    
+                    <div class="cleanup-controls">
+                        <div class="cleanup-option">
+                            <label for="cleanupDays">清理超过：</label>
+                            <input type="number" id="cleanupDays" min="1" max="365" value="7" style="width:60px; padding:8px; border:1px solid #ddd; border-radius:4px;">
+                            <span>天的数据</span>
+                        </div>
+                        
+                        <div class="cleanup-option">
+                            <label class="toggle-switch" style="cursor:pointer;">
+                                <input type="checkbox" id="includeVideos">
+                                <span class="toggle-slider"></span>
+                                <span>同时清理视频文件</span>
+                            </label>
+                        </div>
+                        
+                        <button class="btn btn-danger" id="startCleanupBtn">
+                            <i class="fas fa-broom"></i> 开始清理
+                        </button>
+                    </div>
+                    
+                    <div class="warning-text">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        注意：清理操作不可撤销，建议先备份重要数据！
+                    </div>
+                    
+                    <!-- 清理结果展示 -->
+                    <div id="cleanupResult" style="margin-top:15px; display:none;">
+                        <div id="cleanupResultMessage"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 其他页面（暂时保持不变） -->
+        <div id="exportPage" class="page" style="display:none;">
+            <div class="page-header">
+                <h2><i class="fas fa-file-export"></i> 数据导出</h2>
+                <button class="close-page" data-page="home">× 关闭</button>
+            </div>
+            <div class="page-content">
+                <p>数据导出功能开发中...</p>
+            </div>
+        </div>
+        
+        <div id="settingsPage" class="page" style="display:none;">
+            <div class="page-header">
+                <h2><i class="fas fa-sliders-h"></i> 系统设置</h2>
+                <button class="close-page" data-page="home">× 关闭</button>
+            </div>
+            <div class="page-content">
+                <p>系统设置功能开发中...</p>
+            </div>
+        </div>
+        
+        <div id="helpPage" class="page" style="display:none;">
+            <div class="page-header">
+                <h2><i class="fas fa-question-circle"></i> 帮助文档</h2>
+                <button class="close-page" data-page="home">× 关闭</button>
+            </div>
+            <div class="page-content">
+                <p>帮助文档开发中...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 音效元素 -->
+    <audio id="beepSound" preload="auto">
+        <source src="https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-reward-952.mp3" type="audio/mpeg">
+    </audio>
+    
+    <audio id="successSound" preload="auto">
+        <source src="https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3" type="audio/mpeg">
+    </audio>
+    
+    <audio id="errorSound" preload="auto">
+        <source src="https://assets.mixkit.co/sfx/preview/mixkit-wrong-answer-fail-notification-946.mp3" type="audio/mpeg">
+    </audio>
+
+    <!-- 外部库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
+
+    <!-- ============================================ -->
+    <!-- 新的模块加载系统（修复版） - 仅替换模块加载部分 -->
+    <!-- ============================================ -->
+    
+    <!-- 全局命名空间 -->
+    <script>
+        // 全局命名空间 - 确保在所有脚本之前定义
+        window.ReturnUnpackSystem = window.ReturnUnpackSystem || {
+            modules: {},
+            events: {},
+            initialized: false,
+            initQueue: [],
+            
+            // 初始化状态
+            status: {
+                loaded: {},
+                initialized: {},
+                errors: {}
+            },
+            
+            // 🛠️ 修复：添加录制配置管理
+            recordingConfig: {
+                duration: 30,
+                quality: 'medium',
+                autoStart: true,
+                cameraId: null,
+                loadConfig: function() {
+                    try {
+                        const saved = localStorage.getItem('recordingConfig');
+                        if (saved) {
+                            const config = JSON.parse(saved);
+                            this.duration = config.duration || 30;
+                            this.quality = config.quality || 'medium';
+                            this.autoStart = config.autoStart !== false;
+                            this.cameraId = config.cameraId || null;
+                            console.log('✅ 录制配置已加载:', config);
+                        }
+                    } catch (e) {
+                        console.warn('⚠️ 加载录制配置失败:', e);
+                    }
+                },
+                saveConfig: function() {
+                    try {
+                        const config = {
+                            duration: this.duration,
+                            quality: this.quality,
+                            autoStart: this.autoStart,
+                            cameraId: this.cameraId,
+                            savedAt: new Date().toISOString()
+                        };
+                        localStorage.setItem('recordingConfig', JSON.stringify(config));
+                        console.log('✅ 录制配置已保存:', config);
+                    } catch (e) {
+                        console.error('❌ 保存录制配置失败:', e);
+                    }
+                },
+                updateDuration: function(duration) {
+                    this.duration = Math.max(10, Math.min(600, parseInt(duration) || 30));
+                    this.saveConfig();
+                    console.log(`⏱️ 录制时长更新为: ${this.duration}秒`);
+                },
+                updateQuality: function(quality) {
+                    this.quality = quality;
+                    this.saveConfig();
+                    console.log(`🎥 视频质量更新为: ${quality}`);
+                },
+                updateAutoStart: function(autoStart) {
+                    this.autoStart = autoStart;
+                    this.saveConfig();
+                    console.log(`⚡ 自动录制更新为: ${autoStart ? '开启' : '关闭'}`);
+                },
+                updateCameraId: function(cameraId) {
+                    this.cameraId = cameraId;
+                    this.saveConfig();
+                    console.log(`📷 摄像头ID更新为: ${cameraId || '默认'}`);
+                }
+            },
+            
+            // 模块加载器
+            loadModule: function(moduleName, modulePath, dependencies = []) {
+                return new Promise((resolve, reject) => {
+                    console.log(`🔄 开始加载模块: ${moduleName}`);
+                    
+                    // 检查是否已加载
+                    if (window.ReturnUnpackSystem.modules[moduleName]) {
+                        console.log(`✅ ${moduleName} 已加载`);
+                        resolve(window.ReturnUnpackSystem.modules[moduleName]);
+                        return;
+                    }
+                    
+                    // 创建script元素
+                    const script = document.createElement('script');
+                    script.src = modulePath;
+                    script.dataset.module = moduleName;
+                    
+                    script.onload = function() {
+                        console.log(`✅ 模块加载完成: ${moduleName}`);
+                        setTimeout(() => {
+                            const moduleInstance = window.ReturnUnpackSystem.modules[moduleName];
+                            if (moduleInstance) {
+                                resolve(moduleInstance);
+                            } else {
+                                console.warn(`⚠️ 模块 ${moduleName} 未正确导出`);
+                                resolve(null);
+                            }
+                        }, 100);
+                    };
+                    
+                    script.onerror = function() {
+                        console.error(`❌ 模块加载失败: ${moduleName}`);
+                        reject(new Error(`无法加载模块: ${moduleName}`));
+                    };
+                    
+                    document.head.appendChild(script);
+                });
+            },
+            
+            // 初始化模块
+            initModule: async function(moduleName, options = {}) {
+                try {
+                    console.log(`🔄 开始初始化模块: ${moduleName}`);
+                    
+                    const module = window.ReturnUnpackSystem.modules[moduleName];
+                    if (!module) {
+                        throw new Error(`模块 ${moduleName} 未找到`);
+                    }
+                    
+                    // 检查依赖
+                    const dependencies = {};
+                    if (options.dependencies) {
+                        for (const depName of options.dependencies) {
+                            if (!window.ReturnUnpackSystem.modules[depName]) {
+                                console.warn(`⚠️ 依赖模块 ${depName} 未加载`);
+                            } else {
+                                dependencies[depName] = window.ReturnUnpackSystem.modules[depName];
+                            }
+                        }
+                    }
+                    
+                    // 调用模块的init方法（如果存在）
+                    if (typeof module.init === 'function') {
+                        const initResult = await module.init(dependencies, options.callbacks);
+                        console.log(`✅ ${moduleName} 初始化完成`, initResult);
+                        this.status.initialized[moduleName] = true;
+                        return initResult;
+                    } else {
+                        console.log(`✅ ${moduleName} 无需初始化（无init方法）`);
+                        this.status.initialized[moduleName] = true;
+                        return { success: true };
+                    }
+                } catch (error) {
+                    console.error(`❌ ${moduleName} 初始化失败:`, error);
+                    this.status.errors[moduleName] = error.message;
+                    return { success: false, error: error.message };
+                }
+            },
+            
+            // 批量初始化
+            initAllModules: async function() {
+                console.log('🚀 开始初始化所有模块...');
+                
+                // 模块初始化顺序（依赖顺序）
+                const initOrder = [
+                    'utils',
+                    'database', 
+                    'scanner',
+                    'recorder',
+                    'exchange'
+                ];
+                
+                for (const moduleName of initOrder) {
+                    if (window.ReturnUnpackSystem.modules[moduleName]) {
+                        try {
+                            // 为每个模块配置依赖
+                            const deps = {
+                                utils: [],
+                                database: ['utils'],
+                                scanner: ['utils', 'database'],
+                                recorder: ['utils'],
+                                exchange: ['utils', 'database']
+                            };
+                            
+                            await this.initModule(moduleName, {
+                                dependencies: deps[moduleName] || [],
+                                callbacks: {
+                                    onLog: (data) => {
+                                        console.log(`[${moduleName}] ${data.message}`);
+                                    }
+                                }
+                            });
+                        } catch (error) {
+                            console.error(`模块 ${moduleName} 初始化失败:`, error);
+                        }
+                    }
+                }
+                
+                this.initialized = true;
+                console.log('🎉 所有模块初始化完成');
+                
+                // 触发系统就绪事件
+                if (window.ReturnUnpackSystem.events.onSystemReady) {
+                    window.ReturnUnpackSystem.events.onSystemReady();
+                }
+            },
+            
+            // 系统就绪回调
+            onReady: function(callback) {
+                if (this.initialized) {
+                    callback();
+                } else {
+                    this.events.onSystemReady = callback;
+                }
+            }
+        };
+        
+        console.log('🔧 ReturnUnpackSystem 全局命名空间已创建');
+    </script>
+
+    <!-- ============================================ -->
+    <!-- 异步加载所有模块 -->
+    <!-- ============================================ -->
+    <script>
+        (async function() {
+            console.log('📦 开始加载系统模块...');
+            
+            try {
+                // 🛠️ 修复：先加载录制配置
+                window.ReturnUnpackSystem.recordingConfig.loadConfig();
+                
+                // 1. 加载Utils模块
+                await window.ReturnUnpackSystem.loadModule('utils', 'modules/utils.js');
+                
+                // 2. 加载Database模块
+                await window.ReturnUnpackSystem.loadModule('database', 'modules/database.js');
+                
+                // 3. 加载Scanner模块
+                await window.ReturnUnpackSystem.loadModule('scanner', 'modules/scanner.js');
+                
+                // 4. 加载Recorder模块
+                await window.ReturnUnpackSystem.loadModule('recorder', 'modules/recorder.js');
+                
+                // 5. 加载Exchange模块（数据交换模块）
+                await window.ReturnUnpackSystem.loadModule('exchange', 'modules/exchange.js');
+                
+                console.log('✅ 所有模块加载完成');
+                
+                // 初始化所有模块
+                await window.ReturnUnpackSystem.initAllModules();
+                
+                // 初始化主应用
+                setTimeout(initializeApplication, 500);
+                
+            } catch (error) {
+                console.error('❌ 系统模块加载失败:', error);
+                showError('系统初始化失败: ' + error.message);
+            }
+        })();
+        
+        // 错误显示函数
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                background: #ff4757;
+                color: white;
+                padding: 15px;
+                text-align: center;
+                font-weight: bold;
+                z-index: 99999;
+            `;
+            errorDiv.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${message}`;
+            document.body.appendChild(errorDiv);
+        }
+    </script>
+
+    <!-- ============================================ -->
+    <!-- 🔧 修复版：主应用程序脚本（完整修复） -->
+    <!-- ============================================ -->
+    <script>
+        // 全局变量
+        let currentStream = null;
+        let currentPage = 'home';
+        let currentOrder = null;
+        let searchTimer = null;
+        let isRecording = false;
+        let recordingTimerInterval = null;
+        let recordingSeconds = 0;
+        let downloadInProgress = false; // 防止重复下载
+        let videoProcessingLock = false; // 视频处理锁
+        let recordingDuration = 30; // 🛠️ 修复：存储录制时长
+        
+        // 🛠️ 修复：辅助函数 - Blob转Base64
+        async function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+        
+        // 🛠️ 修复：强化损坏情况保存函数
+        async function saveDamageStatusOnly(damageStatus, notes = '') {
+            if (!currentOrder || !currentOrder.orderNumber) {
+                showMessage('请先选择订单', 'warning');
+                return false;
+            }
+            
+            try {
+                if (!window.ReturnUnpackSystem || !window.ReturnUnpackSystem.modules.database) {
+                    showMessage('数据库模块未初始化', 'error');
+                    return false;
+                }
+                
+                console.log(`🔄 保存损坏状态: ${damageStatus} 到订单 ${currentOrder.orderNumber}`);
+                
+                // 🛠️ 修复：从数据库获取完整的订单数据
+                const orderResult = await window.ReturnUnpackSystem.modules.database.getOrder(currentOrder.orderNumber);
+                
+                // 🛠️ 修复：正确处理返回值格式
+                if (!orderResult || !orderResult.success || !orderResult.data) {
+                    console.error('❌ 获取订单信息失败:', orderResult?.message || '未知错误');
+                    showMessage(`获取订单信息失败: ${orderResult?.message || '订单不存在'}`, 'error');
+                    return false;
+                }
+                
+                const existingOrder = orderResult.data;
+                console.log('📋 数据库中原有订单数据:', existingOrder);
+                
+                // 🛠️ 修复：保留所有原始字段，只更新损坏情况
+                const updates = {
+                    ...existingOrder, // 保留所有字段
+                    damage: damageStatus,
+                    damageType: damageStatus,
+                    notes: notes || existingOrder.notes || '',
+                    updatedAt: new Date().toISOString(),
+                    // 🛠️ 特别保护重要字段
+                    shopName: existingOrder.shopName || currentOrder.shopName || '',
+                    orderNumber: existingOrder.orderNumber || currentOrder.orderNumber,
+                    skuInfo: existingOrder.skuInfo || currentOrder.skuInfo || '',
+                    expressNumber: existingOrder.expressNumber || currentOrder.expressNumber || '',
+                    trackingNumber: existingOrder.trackingNumber || currentOrder.trackingNumber || ''
+                };
+                
+                console.log('🔄 更新后的订单数据:', updates);
+                
+                const result = await window.ReturnUnpackSystem.modules.database.updateOrder(currentOrder.orderNumber, updates);
+                
+                if (result && result.success) {
+                    // 更新当前订单对象
+                    currentOrder = { ...currentOrder, ...updates };
+                    
+                    // 更新显示
+                    updateOrderDetailDisplay();
+                    
+                    showMessage(`损坏情况已保存为: ${damageStatus}`, 'success');
+                    return true;
+                } else {
+                    showMessage('保存失败: 数据库返回错误', 'error');
+                    return false;
+                }
+                
+            } catch (error) {
+                console.error('❌ 保存损坏状态失败:', error);
+                showMessage('保存失败: ' + error.message, 'error');
+                return false;
+            }
+        }
+        
+        // 🛠️ 修复：强化保存视频到订单函数（全局可用）
+        window.saveVideoToOrder = async function(orderNumber, videoBlob, videoInfo = {}) {
+            console.log(`🔄 [saveVideoToOrder] 保存视频到订单 ${orderNumber}`);
+            
+            // 防重复检查
+            if (videoProcessingLock) {
+                console.log('⚠️ 视频处理中，跳过重复请求');
+                return false;
+            }
+            
+            videoProcessingLock = true;
+            
+            try {
+                // 🛠️ 修复：检查订单号是否有效
+                if (!orderNumber || typeof orderNumber !== 'string' || orderNumber.trim() === '') {
+                    console.error('❌ [saveVideoToOrder] 订单号无效:', orderNumber);
+                    showMessage('订单号无效，无法保存视频', 'error');
+                    return false;
+                }
+                
+                const trimmedOrderNumber = orderNumber.trim();
+                console.log(`🔍 [saveVideoToOrder] 处理订单: "${trimmedOrderNumber}"`);
+                
+                if (!window.ReturnUnpackSystem || !window.ReturnUnpackSystem.modules.database) {
+                    console.error('❌ 数据库模块未初始化');
+                    showMessage('数据库模块未初始化', 'error');
+                    return false;
+                }
+                
+                // 🛠️ 修复：从数据库获取完整的订单数据
+                console.log(`🔍 [saveVideoToOrder] 正在查询订单: ${trimmedOrderNumber}`);
+                const orderResult = await window.ReturnUnpackSystem.modules.database.getOrder(trimmedOrderNumber);
+                
+                // 🛠️ 修复：正确处理返回值格式
+                if (!orderResult || !orderResult.success || !orderResult.data) {
+                    console.error('❌ [saveVideoToOrder] 获取订单信息失败:', orderResult?.message || '未知错误');
+                    showMessage(`获取订单信息失败: ${orderResult?.message || '订单不存在'}`, 'error');
+                    return false;
+                }
+                
+                const existingOrder = orderResult.data;
+                const shopName = existingOrder.shopName || '未知店铺';
+                
+                console.log('📋 [saveVideoToOrder] 从数据库获取订单数据:', {
+                    orderNumber: existingOrder.orderNumber,
+                    shopName: existingOrder.shopName,
+                    status: existingOrder.status,
+                    damage: existingOrder.damage || existingOrder.damageType,
+                    expressNumber: existingOrder.expressNumber,
+                    trackingNumber: existingOrder.trackingNumber,
+                    skuInfo: existingOrder.skuInfo ? '已保留' : '无'
+                });
+                console.log(`🏪 [saveVideoToOrder] 店铺名称: ${shopName}`);
+                
+                // 清理店铺名，确保文件名安全
+                const cleanShopName = shopName
+                    .replace(/[<>:"/\\|?*]/g, '')
+                    .replace(/\s+/g, '_')
+                    .trim()
+                    .substring(0, 50);
+                
+                const videoFileName = `${trimmedOrderNumber}_${cleanShopName}.mp4`;
+                
+                console.log(`📁 [saveVideoToOrder] 生成视频文件名: ${videoFileName}`);
+                
+                // 🛠️ 关键修复：保留所有原始字段，只更新视频相关字段和状态
+                const updates = {
+                    ...existingOrder, // 保留所有原始字段
+                    // 视频相关字段更新
+                    videoData: videoInfo.blob ? await blobToBase64(videoInfo.blob) : null,
+                    videoFile: videoFileName,
+                    videoFileName: videoFileName,
+                    videoRecorded: true,
+                    videoDuration: videoInfo.duration || recordingSeconds,
+                    videoSize: videoInfo.fileSize || videoBlob.size || 0,
+                    videoMimeType: videoInfo.mimeType || 'video/mp4',
+                    videoRecordedAt: new Date().toISOString(),
+                    // 状态更新
+                    status: '已处理', // 🛠️ 确保更新状态
+                    processedAt: new Date().toISOString(), // 🛠️ 添加处理时间
+                    updatedAt: new Date().toISOString()
+                };
+                
+                console.log('🔄 [saveVideoToOrder] 更新订单数据:', {
+                    orderNumber: updates.orderNumber,
+                    shopName: updates.shopName,
+                    status: updates.status,
+                    videoFile: updates.videoFile,
+                    skuInfo: updates.skuInfo ? '已保留' : '无',
+                    expressNumber: updates.expressNumber ? '已保留' : '无',
+                    trackingNumber: updates.trackingNumber ? '已保留' : '无',
+                    damageStatus: updates.damage || updates.damageType || '完好'
+                });
+                
+                // 更新订单
+                console.log(`💾 [saveVideoToOrder] 正在更新数据库...`);
+                const updateResult = await window.ReturnUnpackSystem.modules.database.updateOrder(trimmedOrderNumber, updates);
+                
+                if (updateResult && updateResult.success) {
+                    console.log('✅ [saveVideoToOrder] 视频和状态保存成功');
+                    
+                    // 更新当前订单对象
+                    if (currentOrder && currentOrder.orderNumber === trimmedOrderNumber) {
+                        currentOrder = { ...currentOrder, ...updates };
+                        updateOrderDetailDisplay();
+                    }
+                    
+                    // 添加到最近录制列表
+                    addToRecentList(trimmedOrderNumber, videoFileName);
+                    
+                    // 🛠️ 修复：防止重复下载
+                    if (!downloadInProgress) {
+                        downloadInProgress = true;
+                        try {
+                            // 下载视频文件
+                            console.log(`📥 [saveVideoToOrder] 下载视频文件: ${videoFileName}`);
+                            downloadVideoFile(videoBlob, videoFileName);
+                        } catch (downloadError) {
+                            console.error('❌ [saveVideoToOrder] 下载视频失败:', downloadError);
+                        } finally {
+                            setTimeout(() => {
+                                downloadInProgress = false;
+                            }, 1000);
+                        }
+                    } else {
+                        console.log('⚠️ [saveVideoToOrder] 下载已在处理中，跳过重复下载');
+                    }
+                    
+                    // 更新今日统计
+                    updateTodayStats();
+                    
+                    showMessage('视频保存成功，订单状态已更新为"已处理"', 'success');
+                    return true;
+                } else {
+                    console.error('❌ [saveVideoToOrder] 视频保存失败: 数据库更新返回错误');
+                    showMessage('视频保存失败: 数据库错误', 'error');
+                    return false;
+                }
+            } catch (error) {
+                console.error('❌ [saveVideoToOrder] 保存视频到订单失败:', error);
+                showMessage(`保存视频失败: ${error.message}`, 'error');
+                return false;
+            } finally {
+                videoProcessingLock = false;
+            }
+        }
+        
+        // 🛠️ 修复：强化损坏标签点击事件处理
+        function setupDamageTags() {
+            document.querySelectorAll('.damage-btn').forEach(btn => {
+                btn.addEventListener('click', async function() {
+                    const damageStatus = this.getAttribute('data-damage');
+                    const notes = document.getElementById('detailOrderNotes').value;
+                    
+                    // 移除其他按钮的选中状态
+                    document.querySelectorAll('.damage-btn').forEach(b => {
+                        b.classList.remove('selected');
+                    });
+                    
+                    // 设置当前按钮为选中状态
+                    this.classList.add('selected');
+                    
+                    // 保存损坏情况到数据库
+                    await saveDamageStatusOnly(damageStatus, notes);
+                });
+            });
+        }
+        
+        // 等待系统模块初始化完成
+        window.ReturnUnpackSystem.onReady(function() {
+            console.log('🏁 系统模块就绪，开始初始化应用...');
+            initializeApplication();
+        });
+        
+        // 如果系统已经初始化，直接启动
+        if (window.ReturnUnpackSystem.initialized) {
+            console.log('🏁 系统已初始化，直接启动应用');
+            setTimeout(initializeApplication, 500);
+        }
+        
+        function initializeApplication() {
+            console.log('🚀 开始初始化应用程序...');
+            
+            try {
+                // 检查核心模块
+                const requiredModules = ['utils', 'database', 'exchange', 'recorder'];
+                const missingModules = requiredModules.filter(
+                    module => !window.ReturnUnpackSystem.modules[module]
+                );
+                
+                if (missingModules.length > 0) {
+                    console.warn('⚠️ 缺少模块:', missingModules);
+                    showMessage(`警告: 缺少模块 ${missingModules.join(', ')}`, 'warning');
+                }
+                
+                // 🛠️ 修复：初始化录制配置
+                initRecordingConfig();
+                
+                // 初始化时间显示
+                updateTime();
+                setInterval(updateTime, 1000);
+                
+                // 初始化摄像头
+                initCamera();
+                
+                // 设置页面导航
+                setupPageNavigation();
+                
+                // 设置数据库页面事件
+                setupDatabasePage();
+                
+                // 设置扫码输入事件（修改为智能查询）
+                setupSmartScanInput();
+                
+                // 🛠️ 修复：强化损坏标签点击事件
+                setupDamageTags();
+                
+                // 🛠️ 修复：强化录制按钮事件
+                setupRecordingButtons();
+                
+                // 设置订单详情事件
+                setupOrderDetailEvents();
+                
+                // 加载今日统计
+                updateTodayStats();
+                
+                // 设置录制模块事件监听
+                setupRecorderEventListeners();
+                
+                console.log('✅ 系统初始化完成');
+                showMessage('系统就绪', 'success');
+                
+            } catch (error) {
+                console.error('❌ 应用初始化失败:', error);
+                showMessage(`初始化失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 🛠️ 修复：初始化录制配置
+        function initRecordingConfig() {
+            // 加载配置到UI
+            const config = window.ReturnUnpackSystem.recordingConfig;
+            recordingDuration = config.duration;
+            
+            const durationInput = document.getElementById('recordingDuration');
+            const qualitySelect = document.getElementById('videoQuality');
+            const autoStartCheckbox = document.getElementById('autoStartRecording');
+            
+            if (durationInput) {
+                durationInput.value = config.duration;
+                // 🛠️ 修复：添加录制时长变化事件
+                durationInput.addEventListener('change', function() {
+                    const newDuration = parseInt(this.value);
+                    if (!isNaN(newDuration) && newDuration >= 10 && newDuration <= 600) {
+                        config.updateDuration(newDuration);
+                        recordingDuration = newDuration;
+                        console.log(`⏱️ 录制时长设置为: ${newDuration}秒`);
+                        showMessage(`录制时长已设置为 ${newDuration}秒`, 'info');
+                    } else {
+                        this.value = config.duration;
+                        showMessage('录制时长必须在10-600秒之间', 'error');
+                    }
+                });
+                
+                durationInput.addEventListener('input', function() {
+                    const newDuration = parseInt(this.value);
+                    if (!isNaN(newDuration) && newDuration >= 10 && newDuration <= 600) {
+                        config.updateDuration(newDuration);
+                        recordingDuration = newDuration;
+                    }
+                });
+            }
+            
+            if (qualitySelect) {
+                qualitySelect.value = config.quality;
+                // 🛠️ 修复：添加视频质量变化事件
+                qualitySelect.addEventListener('change', function() {
+                    config.updateQuality(this.value);
+                    console.log(`🎥 视频质量设置为: ${this.value}`);
+                    showMessage(`视频质量已设置为 ${getQualityLabel(this.value)}`, 'info');
+                    
+                    // 重新启动摄像头应用新质量设置
+                    if (currentStream) {
+                        const cameraSelect = document.getElementById('cameraSelect');
+                        startCamera(cameraSelect ? cameraSelect.value : null);
+                    }
+                });
+            }
+            
+            if (autoStartCheckbox) {
+                autoStartCheckbox.checked = config.autoStart;
+                autoStartCheckbox.addEventListener('change', function() {
+                    config.updateAutoStart(this.checked);
+                    console.log(`⚡ 自动录制设置为: ${this.checked ? '开启' : '关闭'}`);
+                });
+            }
+        }
+        
+        // 🛠️ 修复：获取质量标签
+        function getQualityLabel(quality) {
+            const labels = {
+                'low': '低质量',
+                'medium': '中等质量',
+                'high': '高质量',
+                'max': '最高质量'
+            };
+            return labels[quality] || quality;
+        }
+        
+        // 设置录制模块事件监听
+        function setupRecorderEventListeners() {
+            const recorder = window.ReturnUnpackSystem.modules.recorder;
+            if (!recorder) return;
+            
+            // 监听录制状态变化
+            recorder.onRecordingStarted = function(data) {
+                console.log('🎬 录制开始:', data);
+                updateRecordingStatus('录制中');
+                startRecordingTimer();
+                updateRecordingButtons(true);
+            };
+            
+            recorder.onRecordingPaused = function() {
+                console.log('⏸️ 录制暂停');
+                updateRecordingStatus('录制暂停');
+            };
+            
+            recorder.onRecordingResumed = function() {
+                console.log('▶️ 录制继续');
+                updateRecordingStatus('录制中');
+            };
+            
+            recorder.onRecordingStopped = function(videoData) {
+                console.log('⏹️ 录制停止:', videoData);
+                updateRecordingStatus('录制完成');
+                stopRecordingTimer();
+                updateRecordingButtons(false);
+            };
+            
+            recorder.onRecordingError = function(error) {
+                console.error('❌ 录制错误:', error);
+                showMessage(`录制错误: ${error.message}`, 'error');
+                updateRecordingStatus('录制错误');
+                stopRecordingTimer();
+                updateRecordingButtons(false);
+            };
+            
+            recorder.onTimerUpdate = function(seconds) {
+                updateTimerDisplay(seconds);
+            };
+        }
+        
+        // 更新时间显示
+        function updateTime() {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('zh-CN', {hour12: false});
+            const dateString = now.toLocaleDateString('zh-CN');
+            document.getElementById('currentTime').textContent = `${dateString} ${timeString}`;
+        }
+        
+        // 🛠️ 修复：初始化摄像头 - 应用质量配置
+        async function initCamera() {
+            try {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const videoDevices = devices.filter(device => device.kind === 'videoinput');
+                
+                const cameraSelect = document.getElementById('cameraSelect');
+                cameraSelect.innerHTML = '<option value="">选择摄像头...</option>';
+                
+                videoDevices.forEach((device, index) => {
+                    const option = document.createElement('option');
+                    option.value = device.deviceId;
+                    option.text = device.label || `摄像头 ${index + 1}`;
+                    cameraSelect.appendChild(option);
+                });
+                
+                // 🛠️ 修复：应用保存的摄像头选择
+                const config = window.ReturnUnpackSystem.recordingConfig;
+                if (config.cameraId && videoDevices.some(d => d.deviceId === config.cameraId)) {
+                    cameraSelect.value = config.cameraId;
+                }
+                
+                if (videoDevices.length > 0) {
+                    const defaultDeviceId = config.cameraId || videoDevices[0].deviceId;
+                    await startCamera(defaultDeviceId);
+                }
+                
+                document.getElementById('recordButton').disabled = false;
+                
+                // 🛠️ 修复：摄像头选择变化事件
+                cameraSelect.addEventListener('change', async function() {
+                    const deviceId = this.value;
+                    config.updateCameraId(deviceId);
+                    await startCamera(deviceId);
+                });
+                
+            } catch (error) {
+                console.error('摄像头初始化失败:', error);
+                document.getElementById('cameraSelect').innerHTML = '<option value="">摄像头访问失败</option>';
+                document.getElementById('recordButton').disabled = true;
+            }
+        }
+        
+        // 🛠️ 修复：启动摄像头 - 应用质量配置
+        async function startCamera(deviceId) {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+            
+            try {
+                const config = window.ReturnUnpackSystem.recordingConfig;
+                const quality = config.quality || 'medium';
+                
+                // 🛠️ 修复：根据质量设置摄像头约束
+                const constraints = getCameraConstraints(deviceId, quality);
+                
+                console.log(`📷 启动摄像头，质量: ${quality}, 设备: ${deviceId || '默认'}`);
+                console.log('📷 摄像头约束:', JSON.stringify(constraints.video));
+                
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                const videoElement = document.getElementById('cameraFeed');
+                videoElement.srcObject = currentStream;
+                
+                document.querySelector('.no-camera').style.display = 'none';
+                videoElement.style.display = 'block';
+                
+                console.log('📷 摄像头启动成功');
+                
+                const recorder = window.ReturnUnpackSystem.modules.recorder;
+                if (recorder && recorder.setVideoStream) {
+                    recorder.setVideoStream(currentStream);
+                }
+                
+            } catch (error) {
+                console.error('📷 摄像头启动失败:', error);
+                document.querySelector('.no-camera').style.display = 'flex';
+                document.getElementById('cameraFeed').style.display = 'none';
+                showMessage(`摄像头启动失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 🛠️ 修复：获取摄像头约束配置
+        function getCameraConstraints(deviceId, quality) {
+            const constraints = {
+                video: {
+                    deviceId: deviceId ? { exact: deviceId } : undefined,
+                },
+                audio: false
+            };
+            
+            // 🛠️ 修复：根据质量设置分辨率
+            switch(quality) {
+                case 'low':
+                    constraints.video.width = { ideal: 640 };
+                    constraints.video.height = { ideal: 480 };
+                    constraints.video.frameRate = { ideal: 15 };
+                    break;
+                case 'medium':
+                    constraints.video.width = { ideal: 1280 };
+                    constraints.video.height = { ideal: 720 };
+                    constraints.video.frameRate = { ideal: 30 };
+                    break;
+                case 'high':
+                    constraints.video.width = { ideal: 1920 };
+                    constraints.video.height = { ideal: 1080 };
+                    constraints.video.frameRate = { ideal: 30 };
+                    break;
+                case 'max':
+                    constraints.video.width = { ideal: 3840 };
+                    constraints.video.height = { ideal: 2160 };
+                    constraints.video.frameRate = { ideal: 30 };
+                    break;
+                default:
+                    constraints.video.width = { ideal: 1280 };
+                    constraints.video.height = { ideal: 720 };
+                    constraints.video.frameRate = { ideal: 30 };
+            }
+            
+            // 🛠️ 修复：添加正方形比例要求
+            constraints.video.aspectRatio = { ideal: 1 };
+            
+            return constraints;
+        }
+        
+        // 设置页面导航
+        function setupPageNavigation() {
+            const navButtons = document.querySelectorAll('.nav-btn');
+            const pageContainer = document.getElementById('pageContainer');
+            const appContainer = document.querySelector('.app-container');
+            
+            navButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    const page = this.getAttribute('data-page');
+                    
+                    navButtons.forEach(btn => btn.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    if (page === 'home') {
+                        appContainer.style.display = 'flex';
+                        pageContainer.classList.remove('active');
+                    } else {
+                        appContainer.style.display = 'none';
+                        pageContainer.classList.add('active');
+                        
+                        document.querySelectorAll('.page').forEach(p => {
+                            p.style.display = 'none';
+                        });
+                        
+                        const targetPage = document.getElementById(page + 'Page');
+                        if (targetPage) {
+                            targetPage.style.display = 'block';
+                            
+                            if (page === 'database') {
+                                loadDatabaseData();
+                            }
+                        }
+                    }
+                    
+                    currentPage = page;
+                });
+            });
+            
+            document.querySelectorAll('.close-page').forEach(button => {
+                button.addEventListener('click', function() {
+                    pageContainer.classList.remove('active');
+                    appContainer.style.display = 'flex';
+                    
+                    navButtons.forEach(btn => {
+                        if (btn.getAttribute('data-page') === 'home') {
+                            btn.classList.add('active');
+                        } else {
+                            btn.classList.remove('active');
+                        }
+                    });
+                    
+                    currentPage = 'home';
+                });
+            });
+        }
+        
+        // 设置数据库页面事件
+        function setupDatabasePage() {
+            document.getElementById('refreshDB')?.addEventListener('click', function() {
+                loadDatabaseData();
+                showMessage('数据已刷新', 'success');
+            });
+            
+            document.getElementById('searchDB')?.addEventListener('click', function() {
+                const searchTerm = prompt('请输入搜索关键词（订单号、备注等）:', '');
+                if (searchTerm) {
+                    searchDatabaseData(searchTerm);
+                }
+            });
+            
+            document.getElementById('clearDB')?.addEventListener('click', async function() {
+                if (confirm('⚠️  警告：确定要清空所有数据吗？此操作不可恢复！')) {
+                    if (confirm('请再次确认：真的要清空所有数据吗？')) {
+                        await clearDatabase();
+                    }
+                }
+            });
+            
+            document.getElementById('selectExcelFileBtn')?.addEventListener('click', function() {
+                document.getElementById('excelFileInput').click();
+            });
+            
+            document.getElementById('excelFileInput')?.addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                const fileNameSpan = document.getElementById('excelFileName');
+                const fileSizeSpan = document.getElementById('fileSize');
+                const importBtn = document.getElementById('startExcelImportBtn');
+                
+                if (file) {
+                    fileNameSpan.textContent = file.name;
+                    fileSizeSpan.textContent = formatFileSize(file.size);
+                    importBtn.disabled = false;
+                    
+                    showMessage(`已选择文件: ${file.name} (${formatFileSize(file.size)})`, 'info');
+                } else {
+                    fileNameSpan.textContent = '未选择文件';
+                    fileSizeSpan.textContent = '';
+                    importBtn.disabled = true;
+                }
+            });
+            
+            document.getElementById('startExcelImportBtn')?.addEventListener('click', async function() {
+                const fileInput = document.getElementById('excelFileInput');
+                if (!fileInput.files[0]) {
+                    showMessage('请先选择Excel文件', 'error');
+                    return;
+                }
+                
+                const file = fileInput.files[0];
+                await startExcelImport(file);
+            });
+            
+            document.getElementById('startCleanupBtn')?.addEventListener('click', async function() {
+                await startDataCleanup();
+            });
+            
+            document.getElementById('backupData')?.addEventListener('click', function() {
+                backupDatabase();
+            });
+            
+            document.getElementById('restoreData')?.addEventListener('click', function() {
+                restoreDatabase();
+            });
+            
+            document.getElementById('applyFilter')?.addEventListener('click', function() {
+                applyDatabaseFilter();
+            });
+            
+            document.getElementById('resetFilter')?.addEventListener('click', function() {
+                resetDatabaseFilter();
+            });
+            
+            document.getElementById('selectAll')?.addEventListener('change', function(e) {
+                const checkboxes = document.querySelectorAll('.record-checkbox');
+                checkboxes.forEach(cb => {
+                    cb.checked = e.target.checked;
+                });
+            });
+        }
+        
+        // 设置智能扫码输入事件
+        function setupSmartScanInput() {
+            const orderInput = document.getElementById('orderInput');
+            const scanButton = document.getElementById('scanButton');
+            const manualButton = document.getElementById('manualButton');
+            const searchResults = document.getElementById('orderSearchResults');
+            
+            orderInput.addEventListener('input', function() {
+                clearTimeout(searchTimer);
+                const value = this.value.trim();
+                
+                if (value.length >= 2) {
+                    searchTimer = setTimeout(() => {
+                        searchOrders(value);
+                    }, 300);
+                } else {
+                    hideSearchResults();
+                }
+            });
+            
+            orderInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && this.value.trim()) {
+                    hideSearchResults();
+                    processScanCode(this.value.trim());
+                    this.value = '';
+                }
+            });
+            
+            document.addEventListener('click', function(e) {
+                if (!orderInput.contains(e.target) && !searchResults.contains(e.target)) {
+                    hideSearchResults();
+                }
+            });
+            
+            scanButton.addEventListener('click', function() {
+                orderInput.focus();
+                showMessage('请扫描快递单号或手动输入', 'info');
+            });
+            
+            manualButton.addEventListener('click', function() {
+                const orderNumber = prompt('请输入订单号:', '');
+                if (orderNumber && orderNumber.trim()) {
+                    hideSearchResults();
+                    processScanCode(orderNumber.trim());
+                }
+            });
+        }
+        
+        // 搜索订单
+        async function searchOrders(searchTerm) {
+            try {
+                if (!window.ReturnUnpackSystem || !window.ReturnUnpackSystem.modules.database) {
+                    return;
+                }
+                
+                const results = await window.ReturnUnpackSystem.modules.database.searchOrders(searchTerm);
+                
+                const searchResults = document.getElementById('orderSearchResults');
+                searchResults.innerHTML = '';
+                
+                if (results.length === 0) {
+                    const resultItem = document.createElement('div');
+                    resultItem.className = 'search-result-item';
+                    resultItem.innerHTML = `<div style="color:#999;">未找到匹配的订单</div>`;
+                    searchResults.appendChild(resultItem);
+                } else {
+                    const displayResults = results.slice(0, 5);
+                    
+                    displayResults.forEach(order => {
+                        const resultItem = document.createElement('div');
+                        resultItem.className = 'search-result-item';
+                        resultItem.innerHTML = `
+                            <div class="order-number">${order.orderNumber || '未知'}</div>
+                            <div class="shop-name">店铺: ${order.shopName || '未填写'}</div>
+                            <div class="express-number">发货: ${order.expressNumber || '未填写'}</div>
+                        `;
+                        
+                        resultItem.addEventListener('click', function() {
+                            document.getElementById('orderInput').value = order.orderNumber;
+                            hideSearchResults();
+                            processScanCode(order.orderNumber);
+                        });
+                        
+                        searchResults.appendChild(resultItem);
+                    });
+                    
+                    if (results.length > 5) {
+                        const moreItem = document.createElement('div');
+                        moreItem.className = 'search-result-item';
+                        moreItem.innerHTML = `<div style="color:#666;">还有 ${results.length - 5} 个结果...</div>`;
+                        searchResults.appendChild(moreItem);
+                    }
+                }
+                
+                searchResults.style.display = 'block';
+                
+            } catch (error) {
+                console.error('搜索订单失败:', error);
+                hideSearchResults();
+            }
+        }
+        
+        // 隐藏搜索结果
+        function hideSearchResults() {
+            const searchResults = document.getElementById('orderSearchResults');
+            searchResults.style.display = 'none';
+            searchResults.innerHTML = '';
+        }
+        
+        // 🛠️ 修复：强化录制按钮事件
+        function setupRecordingButtons() {
+            const recordBtn = document.getElementById('recordButton');
+            const pauseBtn = document.getElementById('pauseButton');
+            const stopBtn = document.getElementById('stopButton');
+            const cameraBtn = document.getElementById('cameraButton');
+            
+            // 开始录制按钮
+            recordBtn.addEventListener('click', async function() {
+                if (!currentOrder || !currentOrder.orderNumber) {
+                    showMessage('请先扫描订单号', 'error');
+                    return;
+                }
+                
+                console.log(`🎬 [recordBtn] 开始录制，当前订单: ${currentOrder.orderNumber}`);
+                console.log(`⏱️ 录制时长配置: ${recordingDuration}秒`);
+                
+                try {
+                    const recorder = window.ReturnUnpackSystem.modules.recorder;
+                    if (!recorder) {
+                        showMessage('录制模块未初始化', 'error');
+                        return;
+                    }
+                    
+                    // 🛠️ 修复：使用全局录制时长变量
+                    const duration = recordingDuration;
+                    const quality = window.ReturnUnpackSystem.recordingConfig.quality;
+                    
+                    const metadata = {
+                        orderNumber: currentOrder.orderNumber,
+                        shopName: currentOrder.shopName || '未知店铺',
+                        duration: duration,
+                        quality: quality,
+                        timestamp: new Date().toISOString()
+                    };
+                    
+                    console.log('📝 录制元数据:', metadata);
+                    
+                    // 🛠️ 修复：传递录制时长配置到录制模块
+                    const result = recorder.startRecording(currentOrder.orderNumber, metadata);
+                    
+                    if (result) {
+                        console.log('🎬 录制开始成功');
+                        isRecording = true;
+                        
+                        updateRecordingStatus('录制中');
+                        startRecordingTimer();
+                        updateRecordingButtons(true);
+                        
+                        showMessage('开始录制拆包视频', 'success');
+                    } else {
+                        showMessage('开始录制失败', 'error');
+                    }
+                    
+                } catch (error) {
+                    console.error('录制开始失败:', error);
+                    showMessage(`录制失败: ${error.message}`, 'error');
+                }
+            });
+            
+            // 暂停按钮
+            pauseBtn.addEventListener('click', function() {
+                const recorder = window.ReturnUnpackSystem.modules.recorder;
+                if (recorder && recorder.togglePause) {
+                    const isPaused = recorder.togglePause();
+                    
+                    if (isPaused) {
+                        pauseBtn.innerHTML = '<i class="fas fa-play"></i> 继续';
+                        recordBtn.innerHTML = '<i class="fas fa-play"></i> 继续录制';
+                        updateRecordingStatus('录制暂停');
+                    } else {
+                        pauseBtn.innerHTML = '<i class="fas fa-pause"></i> 暂停';
+                        recordBtn.innerHTML = '<i class="fas fa-pause"></i> 暂停录制';
+                        updateRecordingStatus('录制中');
+                    }
+                }
+            });
+            
+            // 🛠️ 修复：强化停止按钮处理
+            stopBtn.addEventListener('click', async function() {
+                try {
+                    const recorder = window.ReturnUnpackSystem.modules.recorder;
+                    if (recorder && recorder.stopRecording) {
+                        console.log('🛑 停止录制按钮被点击');
+                        const videoInfo = recorder.stopRecording();
+                        
+                        // 🛠️ 注意：视频保存由 recorder.js 通过 handleVideoRecorded 回调处理
+                        // 所以这里不需要再次调用 saveVideoToOrder
+                        
+                        // 重置录制状态
+                        isRecording = false;
+                        updateRecordingStatus('准备就绪');
+                        stopRecordingTimer();
+                        updateRecordingButtons(false);
+                    }
+                } catch (error) {
+                    console.error('录制停止失败:', error);
+                    showMessage(`停止录制失败: ${error.message}`, 'error');
+                }
+            });
+            
+            // 拍照按钮
+            cameraBtn.addEventListener('click', function() {
+                const recorder = window.ReturnUnpackSystem.modules.recorder;
+                if (recorder && recorder.capturePhoto) {
+                    recorder.capturePhoto();
+                } else {
+                    takePhoto();
+                }
+            });
+        }
+        
+        // 更新录制按钮状态
+        function updateRecordingButtons(isRecording) {
+            const recordBtn = document.getElementById('recordButton');
+            const pauseBtn = document.getElementById('pauseButton');
+            const stopBtn = document.getElementById('stopButton');
+            
+            if (isRecording) {
+                recordBtn.disabled = false;
+                recordBtn.innerHTML = '<i class="fas fa-pause"></i> 暂停录制';
+                pauseBtn.disabled = false;
+                stopBtn.disabled = false;
+            } else {
+                recordBtn.disabled = false;
+                recordBtn.innerHTML = '<i class="fas fa-circle"></i> 开始录制';
+                pauseBtn.disabled = true;
+                pauseBtn.innerHTML = '<i class="fas fa-pause"></i> 暂停';
+                stopBtn.disabled = true;
+            }
+        }
+        
+        // 设置订单详情事件
+        function setupOrderDetailEvents() {
+            document.getElementById('closeOrderDetail')?.addEventListener('click', function() {
+                hideOrderDetail();
+            });
+            
+            // 🛠️ 修复：设置备注保存事件
+            document.getElementById('saveOrderNotes')?.addEventListener('click', async function() {
+                const notes = document.getElementById('detailOrderNotes').value;
+                if (!currentOrder || !currentOrder.orderNumber) {
+                    showMessage('请先选择订单', 'warning');
+                    return;
+                }
+                
+                try {
+                    // 获取当前损坏状态
+                    const selectedDamageBtn = document.querySelector('.damage-btn.selected');
+                    const damageStatus = selectedDamageBtn ? selectedDamageBtn.getAttribute('data-damage') : '完好';
+                    
+                    // 保存损坏状态和备注
+                    await saveDamageStatusOnly(damageStatus, notes);
+                } catch (error) {
+                    console.error('保存备注失败:', error);
+                    showMessage('保存失败: ' + error.message, 'error');
+                }
+            });
+            
+            document.getElementById('startVideoRecording')?.addEventListener('click', function() {
+                if (!currentOrder || !currentOrder.orderNumber) {
+                    showMessage('请先选择订单', 'warning');
+                    return;
+                }
+                
+                document.getElementById('recordButton').click();
+            });
+            
+            document.getElementById('stopVideoRecording')?.addEventListener('click', function() {
+                document.getElementById('stopButton').click();
+            });
+        }
+        
+        // 处理扫码输入
+        async function processScanCode(code) {
+            console.log('📟 扫码输入:', code);
+            
+            try {
+                if (!window.ReturnUnpackSystem || !window.ReturnUnpackSystem.modules.database) {
+                    showMessage('数据库模块未初始化', 'error');
+                    return;
+                }
+                
+                let orders = await window.ReturnUnpackSystem.modules.database.searchOrders(code);
+                
+                if (orders.length === 0) {
+                    console.log('🔍 智能搜索未找到，尝试精确查询...');
+                    const result = await window.ReturnUnpackSystem.modules.database.getOrder(code);
+                    if (result && result.success && result.data) {
+                        orders = [result.data];
+                    } else {
+                        showMessage('未找到匹配的订单', 'warning');
+                        return;
+                    }
+                }
+                
+                if (orders.length > 0) {
+                    await displayOrderDetail(orders[0]);
+                    
+                    if (orders.length > 1) {
+                        showMessage(`找到 ${orders.length} 个匹配订单，显示第一个`, 'info');
+                    }
+                }
+                
+                playSound('beep');
+                
+                // 🛠️ 修复：使用配置中的autoStart
+                const config = window.ReturnUnpackSystem.recordingConfig;
+                if (config.autoStart && orders.length > 0 && !isRecording) {
+                    setTimeout(() => {
+                        document.getElementById('recordButton').click();
+                    }, 1000);
+                }
+                
+                updateTodayStats();
+                
+            } catch (error) {
+                console.error('处理扫码输入失败:', error);
+                showMessage(`处理失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 🛠️ 修复：显示订单详情时确保加载完整数据
+        async function displayOrderDetail(order) {
+            try {
+                if (!window.ReturnUnpackSystem || !window.ReturnUnpackSystem.modules.database) {
+                    console.error('❌ 数据库模块未初始化');
+                    return;
+                }
+                
+                // 🛠️ 修复：从数据库获取完整订单数据
+                console.log(`🔍 正在获取订单详情: ${order.orderNumber}`);
+                const orderResult = await window.ReturnUnpackSystem.modules.database.getOrder(order.orderNumber);
+                
+                // 🛠️ 修复：正确处理返回值格式
+                if (!orderResult || !orderResult.success || !orderResult.data) {
+                    console.error('❌ 获取订单信息失败:', orderResult?.message || '未知错误');
+                    showMessage(`获取订单信息失败: ${orderResult?.message || '订单不存在'}`, 'error');
+                    return;
+                }
+                
+                currentOrder = orderResult.data;
+                
+                console.log('📋 显示订单详情（完整数据）:', {
+                    orderNumber: currentOrder.orderNumber,
+                    shopName: currentOrder.shopName,
+                    status: currentOrder.status,
+                    damage: currentOrder.damage || currentOrder.damageType,
+                    expressNumber: currentOrder.expressNumber,
+                    trackingNumber: currentOrder.trackingNumber
+                });
+                
+                const detailCard = document.getElementById('orderDetailCard');
+                detailCard.style.display = 'block';
+                
+                document.getElementById('detailOrderNumber').textContent = currentOrder.orderNumber || '未填写';
+                document.getElementById('detailShopName').textContent = currentOrder.shopName || '未填写';
+                document.getElementById('detailExpressNumber').textContent = currentOrder.expressNumber || currentOrder.shippingTrackingNumber || '未填写';
+                document.getElementById('detailTrackingNumber').textContent = currentOrder.trackingNumber || currentOrder.returnTrackingNumber || currentOrder.scanCode || '未填写';
+                document.getElementById('detailSkuInfo').textContent = currentOrder.skuInfo || '未填写';
+                document.getElementById('detailOrderNotes').value = currentOrder.notes || '';
+                
+                document.querySelectorAll('.damage-btn').forEach(btn => {
+                    btn.classList.remove('selected');
+                });
+                
+                const damageStatus = currentOrder.damage || currentOrder.damageType || '完好';
+                const damageBtn = document.querySelector(`.damage-btn[data-damage="${damageStatus}"]`);
+                if (damageBtn) {
+                    damageBtn.classList.add('selected');
+                }
+                
+                const videoRecorded = currentOrder.videoFile || currentOrder.videoData;
+                document.getElementById('startVideoRecording').disabled = videoRecorded || isRecording;
+                document.getElementById('stopVideoRecording').disabled = !isRecording;
+                
+                const status = currentOrder.status || '待处理';
+                console.log(`✅ 已加载订单: ${currentOrder.orderNumber}, 状态: ${status}, 店铺: ${currentOrder.shopName || '无'}`);
+                
+                showMessage(`已加载订单: ${currentOrder.orderNumber} (${status})`, 'success');
+                
+            } catch (error) {
+                console.error('显示订单详情失败:', error);
+                showMessage(`加载订单失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 更新订单详情显示
+        function updateOrderDetailDisplay() {
+            if (!currentOrder) return;
+            
+            document.querySelectorAll('.damage-btn').forEach(btn => {
+                btn.classList.remove('selected');
+                const damageStatus = btn.getAttribute('data-damage');
+                if (damageStatus === currentOrder.damage || damageStatus === currentOrder.damageType) {
+                    btn.classList.add('selected');
+                }
+            });
+            
+            if (currentOrder.notes) {
+                document.getElementById('detailOrderNotes').value = currentOrder.notes;
+            }
+            
+            if (currentOrder.shopName) {
+                document.getElementById('detailShopName').textContent = currentOrder.shopName;
+            }
+            
+            console.log('✅ 订单详情已更新:', {
+                orderNumber: currentOrder.orderNumber,
+                damage: currentOrder.damage || currentOrder.damageType,
+                shopName: currentOrder.shopName,
+                status: currentOrder.status
+            });
+        }
+        
+        // 隐藏订单详情
+        function hideOrderDetail() {
+            const detailCard = document.getElementById('orderDetailCard');
+            detailCard.style.display = 'none';
+            currentOrder = null;
+        }
+        
+        // 下载视频文件
+        function downloadVideoFile(videoBlob, filename) {
+            try {
+                console.log(`📥 开始下载视频文件: ${filename}`);
+                
+                const url = URL.createObjectURL(videoBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = filename;
+                link.style.display = 'none';
+                
+                document.body.appendChild(link);
+                link.click();
+                
+                setTimeout(() => {
+                    document.body.removeChild(link);
+                    URL.revokeObjectURL(url);
+                }, 100);
+                
+                console.log(`✅ 视频文件下载完成: ${filename}`);
+            } catch (error) {
+                console.error('❌ 下载视频文件失败:', error);
+            }
+        }
+        
+        // 开始录制计时器
+        function startRecordingTimer() {
+            recordingSeconds = 0;
+            clearInterval(recordingTimerInterval);
+            
+            recordingTimerInterval = setInterval(() => {
+                recordingSeconds++;
+                updateTimerDisplay(recordingSeconds);
+                
+                // 🛠️ 修复：检查是否达到配置的录制时长
+                if (recordingSeconds >= recordingDuration) {
+                    console.log(`⏱️ 达到配置的录制时长: ${recordingDuration}秒，自动停止录制`);
+                    document.getElementById('stopButton').click();
+                }
+            }, 1000);
+        }
+        
+        // 停止录制计时器
+        function stopRecordingTimer() {
+            clearInterval(recordingTimerInterval);
+            recordingTimerInterval = null;
+            recordingSeconds = 0;
+            updateTimerDisplay(0);
+        }
+        
+        // 更新计时器显示
+        function updateTimerDisplay(seconds) {
+            const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const secs = (seconds % 60).toString().padStart(2, '0');
+            document.getElementById('recordingTimer').textContent = `${minutes}:${secs}`;
+        }
+        
+        // 更新录制状态显示
+        function updateRecordingStatus(status) {
+            const statusElement = document.getElementById('recordingStatus');
+            statusElement.textContent = status;
+            
+            if (status === '录制中') {
+                statusElement.style.color = '#ff4757';
+            } else if (status === '录制完成' || status === '准备就绪') {
+                statusElement.style.color = '#2ed573';
+            } else if (status === '录制暂停') {
+                statusElement.style.color = '#ffa502';
+            } else {
+                statusElement.style.color = '#666';
+            }
+        }
+        
+        // 拍照功能
+        function takePhoto() {
+            const video = document.getElementById('cameraFeed');
+            if (!video || !video.videoWidth) {
+                showMessage('摄像头未就绪', 'error');
+                return;
+            }
+            
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            
+            const imageData = canvas.toDataURL('image/png');
+            
+            const link = document.createElement('a');
+            const timestamp = new Date().getTime();
+            link.download = `photo_${timestamp}.png`;
+            link.href = imageData;
+            link.click();
+            
+            showMessage('拍照成功', 'success');
+        }
+        
+        // 添加到最近录制列表
+        function addToRecentList(orderNumber, videoFileName) {
+            const recentList = document.getElementById('recentList');
+            
+            const emptyState = recentList.querySelector('.empty-state');
+            if (emptyState) {
+                emptyState.remove();
+            }
+            
+            const recentItem = document.createElement('div');
+            recentItem.className = 'recent-item';
+            recentItem.innerHTML = `
+                <div style="display:flex; align-items:center; gap:10px; padding:10px; border-bottom:1px solid #eee;">
+                    <i class="fas fa-video" style="color:#4a6ee0;"></i>
+                    <div style="flex:1;">
+                        <div style="font-weight:500;">${orderNumber}</div>
+                        <div style="font-size:12px; color:#666;">${new Date().toLocaleString('zh-CN')}</div>
+                        <div style="font-size:11px; color:#999;">${videoFileName}</div>
+                    </div>
+                    <button class="btn btn-sm" style="padding:4px 8px; font-size:12px; background:#4a6ee0; color:white;" onclick="playVideo('${orderNumber}')">
+                        <i class="fas fa-play"></i> 播放
+                    </button>
+                </div>
+            `;
+            
+            recentList.insertBefore(recentItem, recentList.firstChild);
+            
+            const items = recentList.querySelectorAll('.recent-item');
+            if (items.length > 10) {
+                items[items.length - 1].remove();
+            }
+        }
+        
+        // 播放视频
+        function playVideo(orderNumber) {
+            showMessage(`播放视频: ${orderNumber}`, 'info');
+        }
+        
+        // 加载数据库数据
+        async function loadDatabaseData() {
+            try {
+                showMessage('正在加载数据...', 'info');
+                
+                let orders = [];
+                
+                if (window.ReturnUnpackSystem && window.ReturnUnpackSystem.modules.database) {
+                    orders = await window.ReturnUnpackSystem.modules.database.getAllOrders();
+                    
+                    const formattedData = orders.map(order => ({
+                        id: order.orderNumber,
+                        orderNumber: order.orderNumber,
+                        shopName: order.shopName || '',
+                        scanTime: order.scanTime ? new Date(order.scanTime).toLocaleString('zh-CN') : '未知',
+                        status: order.status || '待处理',
+                        damage: order.damage || order.damageType || '完好',
+                        videoFile: order.videoData ? `video_${order.orderNumber}.mp4` : null,
+                        notes: order.notes || '',
+                        skuInfo: order.skuInfo || ''
+                    }));
+                    
+                    updateDatabaseTable(formattedData);
+                    updateDatabaseStats(formattedData);
+                } else {
+                    const mockData = generateMockData(15);
+                    updateDatabaseTable(mockData);
+                    updateDatabaseStats(mockData);
+                }
+                
+                showMessage('数据加载完成', 'success');
+            } catch (error) {
+                console.error('加载数据失败:', error);
+                showMessage('数据加载失败: ' + error.message, 'error');
+            }
+        }
+        
+        // 搜索数据库数据
+        async function searchDatabaseData(searchTerm) {
+            try {
+                showMessage(`搜索: ${searchTerm}`, 'info');
+                
+                if (window.ReturnUnpackSystem && window.ReturnUnpackSystem.modules.database) {
+                    const results = await window.ReturnUnpackSystem.modules.database.searchOrders(searchTerm);
+                    
+                    const formattedData = results.map(order => ({
+                        id: order.orderNumber,
+                        orderNumber: order.orderNumber,
+                        shopName: order.shopName || '',
+                        scanTime: order.scanTime ? new Date(order.scanTime).toLocaleString('zh-CN') : '未知',
+                        status: order.status || '待处理',
+                        damage: order.damage || order.damageType || '完好',
+                        videoFile: order.videoData ? `video_${order.orderNumber}.mp4` : null,
+                        notes: order.notes || ''
+                    }));
+                    
+                    updateDatabaseTable(formattedData);
+                    updateDatabaseStats(formattedData);
+                    
+                    showMessage(`找到 ${results.length} 条记录`, 'success');
+                } else {
+                    showMessage('数据库模块未加载', 'error');
+                }
+            } catch (error) {
+                console.error('搜索失败:', error);
+                showMessage('搜索失败: ' + error.message, 'error');
+            }
+        }
+        
+        // 清空数据库
+        async function clearDatabase() {
+            try {
+                if (window.ReturnUnpackSystem && window.ReturnUnpackSystem.modules.database) {
+                    await window.ReturnUnpackSystem.modules.database.clearAll();
+                    loadDatabaseData();
+                    showMessage('数据库已清空', 'success');
+                } else {
+                    showMessage('数据库模块未加载', 'error');
+                }
+            } catch (error) {
+                console.error('清空数据库失败:', error);
+                showMessage('清空失败: ' + error.message, 'error');
+            }
+        }
+        
+        // Excel导入功能
+        async function startExcelImport(file) {
+            const importBtn = document.getElementById('startExcelImportBtn');
+            const progressDiv = document.getElementById('importProgress');
+            const resultDiv = document.getElementById('importResult');
+            const progressBar = document.getElementById('progressBar');
+            const progressPercent = document.getElementById('progressPercent');
+            const progressStatus = document.getElementById('progressStatus');
+            const progressCount = document.getElementById('progressCount');
+            
+            try {
+                importBtn.disabled = true;
+                importBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 导入中...';
+                
+                progressDiv.style.display = 'block';
+                resultDiv.style.display = 'none';
+                
+                progressBar.style.width = '0%';
+                progressPercent.textContent = '0%';
+                progressStatus.textContent = '正在读取文件...';
+                progressCount.textContent = '0/0';
+                
+                const mergeStrategy = document.getElementById('mergeStrategy').value;
+                
+                console.log('开始导入Excel文件:', file.name, '策略:', mergeStrategy);
+                
+                if (!window.ReturnUnpackSystem || !window.ReturnUnpackSystem.modules.exchange) {
+                    throw new Error('数据交换模块未初始化');
+                }
+                
+                const result = await window.ReturnUnpackSystem.modules.exchange.importFromFile(file, mergeStrategy);
+                
+                progressBar.style.width = '100%';
+                progressPercent.textContent = '100%';
+                progressStatus.textContent = '导入完成';
+                progressCount.textContent = `${result.stats.total}/${result.stats.total}`;
+                
+                showImportResult({
+                    success: true,
+                    total: result.stats.total,
+                    created: result.stats.added,
+                    updated: result.stats.updated,
+                    skipped: result.stats.skipped,
+                    failed: result.stats.failed,
+                    report: result.report
+                });
+                
+                loadDatabaseData();
+                playSound('success');
+                
+            } catch (error) {
+                console.error('Excel导入失败:', error);
+                
+                showImportResult({
+                    success: false,
+                    error: error.message
+                });
+                
+                playSound('error');
+            } finally {
+                importBtn.disabled = false;
+                importBtn.innerHTML = '<i class="fas fa-upload"></i> 开始导入';
+            }
+        }
+        
+        // 显示导入结果
+        function showImportResult(result) {
+            const progressDiv = document.getElementById('importProgress');
+            const resultDiv = document.getElementById('importResult');
+            const resultMessage = document.getElementById('resultMessage');
+            
+            progressDiv.style.display = 'none';
+            resultDiv.style.display = 'block';
+            
+            if (result.success) {
+                resultMessage.className = 'result-card result-success';
+                resultMessage.innerHTML = `
+                    <h5 style="margin-top:0; margin-bottom:15px;">
+                        <i class="fas fa-check-circle"></i> Excel导入成功！
+                    </h5>
+                    <p style="margin-bottom:15px;">成功处理 ${result.total || 0} 条记录</p>
+                    
+                    <div class="stats-grid-small">
+                        <div class="stat-card-small">
+                            <div class="stat-value-small" style="color:#28a745;">${result.created || 0}</div>
+                            <div class="stat-label-small">新增</div>
+                        </div>
+                        <div class="stat-card-small">
+                            <div class="stat-value-small" style="color:#17a2b8;">${result.updated || 0}</div>
+                            <div class="stat-label-small">更新</div>
+                        </div>
+                        <div class="stat-card-small">
+                            <div class="stat-value-small" style="color:#ffc107;">${result.skipped || 0}</div>
+                            <div class="stat-label-small">跳过</div>
+                        </div>
+                        <div class="stat-card-small">
+                            <div class="stat-value-small" style="color:#dc3545;">${result.failed || 0}</div>
+                            <div class="stat-label-small">失败</div>
+                        </div>
+                    </div>
+                    
+                    ${result.report ? `
+                        <div style="margin-top:15px; padding-top:15px; border-top:1px solid rgba(0,0,0,0.1);">
+                            <div style="font-size:12px; color:#666;">
+                                <div><i class="fas fa-clock"></i> 耗时: ${result.report.summary.耗时 || 'N/A'}</div>
+                                <div><i class="fas fa-file"></i> 文件: ${result.report.summary['文件大小'] || 'N/A'}</div>
+                            </div>
+                        </div>
+                    ` : ''}
+                    
+                    <button class="btn btn-primary" onclick="loadDatabaseData()" style="margin-top:15px; width:100%;">
+                        <i class="fas fa-sync-alt"></i> 刷新数据查看
+                    </button>
+                `;
+            } else {
+                resultMessage.className = 'result-card result-error';
+                resultMessage.innerHTML = `
+                    <h5 style="margin-top:0; margin-bottom:10px;">
+                        <i class="fas fa-exclamation-circle"></i> Excel导入失败
+                    </h5>
+                    <p>${result.error || '未知错误'}</p>
+                    ${result.error && result.error.includes('Excel') ? 
+                        '<p style="margin-top:10px; font-size:13px;"><i class="fas fa-lightbulb"></i> 提示：请确保文件格式正确，并包含正确的25列数据</p>' : ''}
+                `;
+            }
+        }
+        
+        // 数据清理功能
+        async function startDataCleanup() {
+            const cleanupDays = parseInt(document.getElementById('cleanupDays').value) || 7;
+            const includeVideos = document.getElementById('includeVideos').checked;
+            const cleanupBtn = document.getElementById('startCleanupBtn');
+            const resultDiv = document.getElementById('cleanupResult');
+            const resultMessage = document.getElementById('cleanupResultMessage');
+            
+            if (!confirm(`⚠️  确定要清理超过 ${cleanupDays} 天的数据吗？\n\n此操作不可撤销！`)) {
+                return;
+            }
+            
+            try {
+                cleanupBtn.disabled = true;
+                cleanupBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> 清理中...';
+                
+                if (!window.ReturnUnpackSystem || !window.ReturnUnpackSystem.modules.database) {
+                    throw new Error('数据库模块未初始化');
+                }
+                
+                const result = await window.ReturnUnpackSystem.modules.database.cleanupOldData(cleanupDays);
+                
+                resultDiv.style.display = 'block';
+                resultMessage.innerHTML = `
+                    <div style="background:#d4edda; color:#155724; padding:15px; border-radius:5px; border:1px solid #c3e6cb;">
+                        <h5 style="margin-top:0;"><i class="fas fa-check-circle"></i> 数据清理完成！</h5>
+                        <p>清理统计：</p>
+                        <ul style="margin-bottom:0;">
+                            <li>找到超过 ${cleanupDays} 天的记录: ${result.totalFound || 0} 条</li>
+                            <li>成功删除订单记录: ${result.deletedCount || 0} 条</li>
+                            ${includeVideos ? `<li>成功删除视频文件: ${result.videosDeleted || 0} 个</li>` : ''}
+                        </ul>
+                    </div>
+                `;
+                
+                loadDatabaseData();
+                showMessage('数据清理完成', 'success');
+                
+            } catch (error) {
+                console.error('数据清理失败:', error);
+                
+                resultDiv.style.display = 'block';
+                resultMessage.innerHTML = `
+                    <div style="background:#f8d7da; color:#721c24; padding:15px; border-radius:5px; border:1px solid #f5c6cb;">
+                        <h5 style="margin-top:0;"><i class="fas fa-exclamation-circle"></i> 清理失败</h5>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+                
+                showMessage('清理失败: ' + error.message, 'error');
+            } finally {
+                cleanupBtn.disabled = false;
+                cleanupBtn.innerHTML = '<i class="fas fa-broom"></i> 开始清理';
+            }
+        }
+        
+        // 备份数据库
+        async function backupDatabase() {
+            try {
+                if (window.ReturnUnpackSystem && window.ReturnUnpackSystem.modules.database) {
+                    await window.ReturnUnpackSystem.modules.database.createBackup();
+                    document.getElementById('lastBackupTime').textContent = new Date().toLocaleString('zh-CN');
+                    showMessage('数据库备份创建成功', 'success');
+                } else {
+                    showMessage('数据库模块未加载', 'error');
+                }
+            } catch (error) {
+                console.error('备份数据库失败:', error);
+                showMessage('备份失败: ' + error.message, 'error');
+            }
+        }
+        
+        // 恢复备份
+        function restoreDatabase() {
+            showMessage('数据库恢复功能开发中...', 'info');
+        }
+        
+        // 应用数据库筛选
+        function applyDatabaseFilter() {
+            const dateFrom = document.getElementById('filterDateFrom').value;
+            const dateTo = document.getElementById('filterDateTo').value;
+            const status = document.getElementById('filterStatus').value;
+            const damage = document.getElementById('filterDamage').value;
+            
+            showMessage(`应用筛选: ${status || '全部'} | ${damage || '全部'} | ${dateFrom || '不限'} 至 ${dateTo || '不限'}`, 'info');
+        }
+        
+        // 重置数据库筛选
+        function resetDatabaseFilter() {
+            document.getElementById('filterDateFrom').value = '';
+            document.getElementById('filterDateTo').value = '';
+            document.getElementById('filterStatus').value = '';
+            document.getElementById('filterDamage').value = '';
+            
+            loadDatabaseData();
+            showMessage('筛选条件已重置', 'info');
+        }
+        
+        // 更新数据库表格
+        function updateDatabaseTable(data) {
+            const tbody = document.getElementById('databaseTableBody');
+            
+            if (!data || data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="9" style="text-align:center;padding:40px;">
+                            <i class="fas fa-database" style="font-size:48px;color:#ddd;margin-bottom:10px;"></i>
+                            <p>暂无数据</p>
+                            <p style="color:#999;font-size:14px;margin-top:10px;">点击下方"导入Excel数据"按钮导入数据</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+            
+            let html = '';
+            data.forEach((record, index) => {
+                const statusClass = getStatusClass(record.status);
+                const damageClass = getDamageClass(record.damage);
+                
+                html += `
+                    <tr>
+                        <td><input type="checkbox" class="record-checkbox" data-id="${record.id}"></td>
+                        <td><strong>${record.orderNumber}</strong></td>
+                        <td>${record.shopName || ''}</td>
+                        <td>${record.scanTime}</td>
+                        <td><span class="${statusClass}">${record.status}</span></td>
+                        <td><span class="${damageClass}">${record.damage}</span></td>
+                        <td>${record.videoFile ? 
+                            `<a href="#" style="color:#4a6ee0;"><i class="fas fa-video"></i> ${record.videoFile}</a>` : 
+                            '<span style="color:#999;">无</span>'}</td>
+                        <td>${record.notes || ''}</td>
+                        <td>
+                            <button class="btn btn-sm" onclick="editRecord('${record.id}')" style="padding:4px 8px; font-size:12px; background:#17a2b8; color:white; margin-right:5px;">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-sm" onclick="deleteRecord('${record.id}')" style="padding:4px 8px; font-size:12px; background:#dc3545; color:white;">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            tbody.innerHTML = html;
+        }
+        
+        // 更新数据库统计
+        function updateDatabaseStats(data) {
+            const total = data.length;
+            const damaged = data.filter(item => item.damage === '破损' || item.damage === '缺件').length;
+            const pending = data.filter(item => item.status === '待处理').length;
+            const processed = data.filter(item => item.status === '已处理').length;
+            
+            document.getElementById('totalRecords').textContent = total;
+            document.getElementById('damagedRecords').textContent = damaged;
+            document.getElementById('pendingRecords').textContent = pending;
+            document.getElementById('processedRecords').textContent = processed;
+        }
+        
+        // 编辑记录
+        function editRecord(id) {
+            showMessage(`编辑记录 ID: ${id}`, 'info');
+        }
+        
+        // 删除记录
+        async function deleteRecord(id) {
+            if (confirm('确定要删除这条记录吗？')) {
+                try {
+                    if (window.ReturnUnpackSystem && window.ReturnUnpackSystem.modules.database) {
+                        await window.ReturnUnpackSystem.modules.database.deleteOrder(id);
+                        showMessage(`删除记录: ${id}`, 'success');
+                        loadDatabaseData();
+                    } else {
+                        showMessage('数据库模块未加载', 'error');
+                    }
+                } catch (error) {
+                    console.error('删除记录失败:', error);
+                    showMessage('删除失败: ' + error.message, 'error');
+                }
+            }
+        }
+        
+        // 更新今日统计
+        async function updateTodayStats() {
+            try {
+                if (window.ReturnUnpackSystem && window.ReturnUnpackSystem.modules.database) {
+                    const stats = await window.ReturnUnpackSystem.modules.database.getStatistics();
+                    
+                    document.getElementById('todayTotal').textContent = stats.todayTotal || 0;
+                    document.getElementById('todayProcessed').textContent = stats.todayProcessed || 0;
+                    document.getElementById('todayDamaged').textContent = stats.todayDamaged || 0;
+                    document.getElementById('todayVideos').textContent = stats.todayVideos || 0;
+                }
+            } catch (error) {
+                console.error('更新统计失败:', error);
+            }
+        }
+        
+        // 生成模拟数据（测试用）
+        function generateMockData(count) {
+            const mockData = [];
+            const statuses = ['待处理', '已处理', '已退回'];
+            const damages = ['完好', '破损', '缺件', '其他'];
+            const shopNames = ['旗舰店', '专卖店', '直营店', '代理店'];
+            
+            for (let i = 1; i <= count; i++) {
+                const date = new Date();
+                date.setDate(date.getDate() - Math.floor(Math.random() * 30));
+                
+                mockData.push({
+                    id: i,
+                    orderNumber: `TH${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}${String(i).padStart(3, '0')}`,
+                    shopName: `${shopNames[Math.floor(Math.random() * shopNames.length)]}${Math.floor(Math.random() * 100)}`,
+                    scanTime: date.toLocaleString('zh-CN'),
+                    status: statuses[Math.floor(Math.random() * statuses.length)],
+                    damage: damages[Math.floor(Math.random() * damages.length)],
+                    videoFile: Math.random() > 0.3 ? `video_${i}.mp4` : null,
+                    notes: Math.random() > 0.5 ? `备注内容 ${i}` : '',
+                    skuInfo: Math.random() > 0.5 ? `SKU${Math.floor(Math.random() * 1000)}-${Math.floor(Math.random() * 100)}` : ''
+                });
+            }
+            
+            return mockData;
+        }
+        
+        // 播放音效
+        function playSound(type) {
+            try {
+                const audio = document.getElementById(type + 'Sound');
+                if (audio) {
+                    audio.currentTime = 0;
+                    audio.play().catch(e => console.log('音效播放失败:', e));
+                }
+            } catch (error) {
+                console.log('音效播放失败:', error);
+            }
+        }
+        
+        // 显示消息通知
+        function showMessage(message, type = 'info') {
+            console.log(`${type}: ${message}`);
+            
+            const statusText = document.getElementById('statusText');
+            if (statusText) {
+                statusText.textContent = message;
+                
+                const indicator = document.querySelector('.status-indicator');
+                if (indicator) {
+                    if (type === 'success') {
+                        indicator.style.backgroundColor = '#4cd964';
+                    } else if (type === 'error') {
+                        indicator.style.backgroundColor = '#ff4757';
+                    } else if (type === 'warning') {
+                        indicator.style.backgroundColor = '#ffa502';
+                    } else {
+                        indicator.style.backgroundColor = '#4a6ee0';
+                    }
+                }
+            }
+            
+            const notification = document.createElement('div');
+            notification.className = `notification notification-${type}`;
+            notification.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+                ${message}
+            `;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
+                }, 300);
+            }, 3000);
+        }
+        
+        // 辅助函数
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        function getStatusClass(status) {
+            switch(status) {
+                case '待处理': return 'status-pending';
+                case '已处理': return 'status-processed';
+                case '已退回': return 'status-returned';
+                default: return '';
+            }
+        }
+        
+        function getDamageClass(damage) {
+            switch(damage) {
+                case '完好': return 'tag tag-good';
+                case '破损': return 'tag tag-damage';
+                case '缺件': return 'tag tag-missing';
+                case '其他': return 'tag tag-other';
+                default: return '';
+            }
+        }
+    </script>
+</body>
+</html>
